@@ -9,12 +9,24 @@ public class DatasetLoader {
         try {
             DataSource source = new DataSource(filepath);
             Instances dataset = source.getDataSet();
-            //dataset.setClassIndex(dataset.numAttributes()- 1);
+
+            // Set the class index attribute if it is not provided
+            if (dataset.classIndex() == -1)
+                dataset.setClassIndex(dataset.numAttributes()- 1);
+
             datasets.put(dataset_name, dataset);
             System.out.println(dataset_name + " successfully loaded!");
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public void load_nasa_datasets () {
+        load_dataset("CM1", "datasets/promise/cm1.arff");
+        load_dataset("JM1", "datasets/promise/jm1.arff");
+        load_dataset("KC1", "datasets/promise/kc1.arff");
+        load_dataset("KC2", "datasets/promise/kc2.arff");
+        load_dataset("PC1", "datasets/promise/pc1.arff");
     }
 
     public Instances get_dataset (String dataset_name) {
