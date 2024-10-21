@@ -25,6 +25,21 @@ public class Main {
 
     }
 
+    public static String evaluations_to_string () {
+        StringBuilder output = new StringBuilder();
+        // Print header for the table
+        output.append(String.format("%-30s %-10s %-10s %-10s\n", "Model Name", "Accuracy", "Recall", "F-Measure"));
+        output.append("----------------------------------------------------------\n");
+
+        for (Map.Entry<String, Evaluation> entry : eval_map.entrySet()) {
+            Evaluation eval = entry.getValue();
+            // Print metrics in a table row
+            output.append(String.format("%-30s %-10.4f %-10.4f %-10.4f\n",
+                    entry.getKey().trim(), eval.pctCorrect()/100, eval.recall(1), eval.fMeasure(1)));
+        }
+        return output.toString();
+    }
+
     public static void main(String[] args) {
         try {
             WekaPackageManager.loadPackages(false);
@@ -40,6 +55,8 @@ public class Main {
                 AbstractClassifier model = entry.getValue();
                 run_test(loader, model);
             }
+            System.out.println(evaluations_to_string());
+
        } catch (Exception e) {
            e.printStackTrace();
         }
