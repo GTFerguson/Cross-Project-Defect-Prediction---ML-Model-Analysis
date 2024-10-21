@@ -26,4 +26,5 @@ public class ModelHandler {
     }
 
     public AbstractClassifier get_model (String model_name) { return model_map.get(model_name); }
+    public HashMap<String, AbstractClassifier> get_model_map () { return model_map; }
 }
