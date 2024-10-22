@@ -32,4 +32,5 @@ public class DatasetLoader {
     public Instances get_dataset (String dataset_name) {
         return datasets.get(dataset_name);
     }
+    public HashMap<String, Instances> get_datasets() { return datasets; }
 }

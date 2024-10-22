@@ -10,21 +10,8 @@ import java.util.Map;
 import java.util.Random;
 
 public class Main {
-    private static Map<String, Evaluation> eval_map = new HashMap<String, Evaluation>();
 
-    public static void run_test (DatasetLoader _loader, AbstractClassifier model) {
-        try {
-            System.out.println("Testing "+ model.toString());
-            Instances current_dataset = _loader.get_dataset("CM1");
-            Evaluation eval = new Evaluation(current_dataset);
-            eval.crossValidateModel(model, current_dataset, 10, new Random(42));
-            eval_map.put(model.toString(), eval);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
+    /*
     public static String evaluations_to_string () {
         StringBuilder output = new StringBuilder();
         // Print header for the table
@@ -39,23 +26,21 @@ public class Main {
         }
         return output.toString();
     }
+     */
 
     public static void main(String[] args) {
         try {
             WekaPackageManager.loadPackages(false);
             DatasetLoader loader = new DatasetLoader();
             ModelHandler model_handler = new ModelHandler();
+            TestRunner test_runner = new TestRunner();
 
             model_handler.load_models();
             loader.load_nasa_datasets();
 
-            // Loop over each model in the model handler map
-            for (Map.Entry<String, AbstractClassifier> entry : model_handler.get_model_map().entrySet()) {
-                String model_name = entry.getKey();
-                AbstractClassifier model = entry.getValue();
-                run_test(loader, model);
-            }
-            System.out.println(evaluations_to_string());
+            test_runner.run_cpdp_test(model_handler, loader.get_datasets(), "CM1");
+            System.out.println("Test Evaluations");
+            System.out.println(test_runner.evaluation_results_to_string());
 
        } catch (Exception e) {
            e.printStackTrace();
