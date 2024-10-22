@@ -41,6 +41,8 @@ public class Main {
             test_runner.run_cpdp_test(model_handler, loader.get_datasets(), "CM1");
             System.out.println("Test Evaluations");
             System.out.println(test_runner.evaluation_results_to_string());
+            System.out.println("Test Summarisations");
+            System.out.println(test_runner.summarise_results());
 
        } catch (Exception e) {
            e.printStackTrace();

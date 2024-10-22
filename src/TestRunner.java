@@ -101,4 +101,43 @@ public class TestRunner {
         }
         return output.toString();
     }
+
+    public String summarise_results () {
+        StringBuilder summary = new StringBuilder();
+
+        // Print header for the table
+        summary.append(
+                String.format("%-25s %-10s %-10s %-10s\n",
+                        "Model Name", "Accuracy", "Recall", "F-Measure")
+        );
+
+        for (Map.Entry<String, List<EvaluationResult>> entry : eval_map.entrySet()) {
+            String model_name = entry.getKey();
+            List<EvaluationResult> results = entry.getValue();
+
+            // Variables to accumulate the metrics
+            double accuracy = 0.0;
+            double recall = 0.0;
+            double f_measure = 0.0;
+            int num_evaluations = results.size();
+
+            // Sum up the metrics
+            for (EvaluationResult result : results) {
+                Evaluation eval = result.get_evaluation();
+                accuracy    += eval.pctCorrect() / 100;
+                recall      += eval.recall(1);
+                f_measure   += eval.fMeasure(1);
+            }
+
+            // Calculate the averages
+            accuracy    /= num_evaluations;
+            recall      /= num_evaluations;
+            f_measure   /= num_evaluations;
+
+            summary.append(String.format("%-25s %-10.4f %-10.4f %-10.4f\n",
+                    model_name, accuracy, recall, f_measure)
+            );
+        }
+        return summary.toString();
+    }
 }
