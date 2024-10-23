@@ -42,9 +42,9 @@ public class Main {
             System.out.println("Test Evaluations");
             System.out.println(test_runner.evaluation_results_to_string());
             System.out.println("Test Summarisations");
-            System.out.println(test_runner.summarise_results());
-            System.out.println();
             System.out.println(test_runner.summarise_results_per_training_set());
+            System.out.println();
+            System.out.println(test_runner.summarise_results());
 
         } catch (Exception e) {
             e.printStackTrace();

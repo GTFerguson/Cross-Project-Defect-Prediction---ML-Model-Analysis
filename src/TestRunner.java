@@ -11,18 +11,6 @@ public class TestRunner {
     // Storage for evaluations produced by tests. Each
     private static Map<String, List<EvaluationResult>> eval_map = new HashMap<String, List<EvaluationResult>>();
 
-    // Runs a single test on a given dataset using the provided model
-    public Evaluation run_test (Map.Entry<String, AbstractClassifier> model_entry,
-                                Map.Entry<String, Instances> testing_set_entry) throws Exception {
-            System.out.println("Testing '"+ model_entry.getKey() + "' on dataset '" + testing_set_entry.getKey() + "'");
-            Instances current_dataset = testing_set_entry.getValue();
-            Evaluation eval = new Evaluation(testing_set_entry.getValue());
-            eval.crossValidateModel(
-                    model_entry.getValue(), testing_set_entry.getValue(), NUM_OF_FOLDS, new Random(SEED)
-            );
-            return eval;
-    }
-
     public boolean train_model (Map.Entry<String, AbstractClassifier> model_entry,
                                 Map.Entry<String, Instances> training_set_entry) {
         try {
@@ -34,6 +22,16 @@ public class TestRunner {
             return false;
         }
         return true;
+    }
+
+    // Runs a single test on a given dataset using the provided model
+    public Evaluation run_test (Map.Entry<String, AbstractClassifier> model_entry,
+                                Map.Entry<String, Instances> testing_set_entry) throws Exception {
+            System.out.println("Testing '"+ model_entry.getKey() + "' on dataset '" + testing_set_entry.getKey() + "'");
+            Instances current_dataset = testing_set_entry.getValue();
+            Evaluation eval = new Evaluation(testing_set_entry.getValue());
+            eval.evaluateModel(model_entry.getValue(), testing_set_entry.getValue());
+            return eval;
     }
 
     // Helper method to run batch testing on a given Map of datasets.
@@ -145,7 +143,7 @@ public class TestRunner {
         // Print header for the summary table
         summary.append(String.format("%-25s %-20s %-10s %-10s %-10s %-10s\n",
                 "Model Name", "Training Set", "Count", "Accuracy", "Recall", "F-Measure"));
-        summary.append("-------------------------------------------------------------------------------\n");
+        summary.append("-----------------------------------------------------------------------------------------\n");
 
         Map<String, Map<String, List<EvaluationResult>>> sorted_evals = new HashMap<>();
         // Iterate through the eval_map to get model names and their evaluations
