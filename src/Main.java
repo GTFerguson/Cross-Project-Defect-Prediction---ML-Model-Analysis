@@ -28,7 +28,7 @@ public class Main {
     }
      */
 
-    public static void main(String[] args) {
+    public static void run_tests () {
         try {
             WekaPackageManager.loadPackages(false);
             DatasetLoader loader = new DatasetLoader();
@@ -43,9 +43,18 @@ public class Main {
             System.out.println(test_runner.evaluation_results_to_string());
             System.out.println("Test Summarisations");
             System.out.println(test_runner.summarise_results());
+            System.out.println();
+            System.out.println(test_runner.summarise_results_per_training_set());
 
-       } catch (Exception e) {
-           e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+    }
+
+    public static void main(String[] args) {
+        EvaluationsDB eval_db = new EvaluationsDB();
+        eval_db.connect();
+
+        run_tests();
     }
 }

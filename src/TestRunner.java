@@ -138,4 +138,66 @@ public class TestRunner {
         }
         return summary.toString();
     }
+
+    public String summarise_results_per_training_set () {
+        StringBuilder summary = new StringBuilder();
+
+        // Print header for the summary table
+        summary.append(String.format("%-25s %-20s %-10s %-10s %-10s %-10s\n",
+                "Model Name", "Training Set", "Count", "Accuracy", "Recall", "F-Measure"));
+        summary.append("-------------------------------------------------------------------------------\n");
+
+        Map<String, Map<String, List<EvaluationResult>>> sorted_evals = new HashMap<>();
+        // Iterate through the eval_map to get model names and their evaluations
+        for (Map.Entry<String, List<EvaluationResult>> entry : eval_map.entrySet()) {
+            String model_name = entry.getKey();
+
+            // Group results by training set name
+            for (EvaluationResult eval_result : entry.getValue()) {
+                String training_set_name = eval_result.get_training_set_name();
+
+                // This complicated mess checks retrieves existing record if it exists and adds eval_result
+                sorted_evals
+                        .computeIfAbsent(model_name, k -> new HashMap<>())
+                        .computeIfAbsent(training_set_name, k -> new ArrayList<>()).add(eval_result);
+            }
+        }
+
+        // For each model...
+        for (Map.Entry<String, Map<String, List<EvaluationResult>>> model_results_entry : sorted_evals.entrySet()) {
+            String model_name = model_results_entry.getKey();
+            Map<String, List<EvaluationResult>> model_results = model_results_entry.getValue();
+
+            // for each training set...
+            for (Map.Entry<String, List<EvaluationResult>> training_set_results : model_results.entrySet()) {
+                List<EvaluationResult> eval_list = training_set_results.getValue();
+                int eval_count = eval_list.size();
+
+                // Variables to store our tallies
+                double accuracy     = 0.0;
+                double recall       = 0.0;
+                double f_measure    = 0.0;
+
+                // Iterate over all EvaluationResult objects to calculate totals
+                for (EvaluationResult eval_result : eval_list) {
+                    Evaluation eval = eval_result.get_evaluation();
+
+                    accuracy    += eval.pctCorrect() / 100;
+                    recall      += eval.recall(1);
+                    if (!Double.isNaN(eval.fMeasure(1))) f_measure += eval.fMeasure(1);
+                }
+
+                // Calculate averages
+                accuracy    /= eval_count;
+                recall      /= eval_count;
+                f_measure   /= eval_count;
+
+                // Print metrics for the current model and training set
+                summary.append(String.format("%-25s %-20s %-10d %-10.4f %-10.4f %-10.4f\n",
+                        model_name, training_set_results.getKey(), eval_count, accuracy, recall, f_measure));
+            }
+        }
+        return summary.toString();
+    }
+
 }

@@ -22,10 +22,12 @@ public class ModelHandler {
 
     public void load_models () {
         load_model("Immunos-1",     Immunos1.class);
+        /*
         load_model("Immunos-2",     Immunos2.class);
         load_model("Immunos-99",    Immunos99.class);
         load_model("J48",           J48.class);
         load_model("Naive Bayes",   NaiveBayes.class);
+         */
     }
 
     public AbstractClassifier get_model (String model_name) { return model_map.get(model_name); }
