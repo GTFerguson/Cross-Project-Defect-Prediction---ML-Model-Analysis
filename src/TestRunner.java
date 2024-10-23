@@ -110,6 +110,7 @@ public class TestRunner {
                 String.format("%-25s %-10s %-10s %-10s\n",
                         "Model Name", "Accuracy", "Recall", "F-Measure")
         );
+        summary.append("---------------------------------------------------------\n");
 
         for (Map.Entry<String, List<EvaluationResult>> entry : eval_map.entrySet()) {
             String model_name = entry.getKey();
@@ -119,20 +120,28 @@ public class TestRunner {
             double accuracy = 0.0;
             double recall = 0.0;
             double f_measure = 0.0;
-            int num_evaluations = results.size();
+            int eval_count = results.size();
 
             // Sum up the metrics
             for (EvaluationResult result : results) {
                 Evaluation eval = result.get_evaluation();
-                accuracy    += eval.pctCorrect() / 100;
-                recall      += eval.recall(1);
-                f_measure   += eval.fMeasure(1);
+
+                // Check if the test and training set are the same...
+                if (result.get_testing_set_name().equals(result.get_training_set_name())) {
+                    // if so we don't include it in the summary and reduce the eval count
+                    --eval_count;
+                } else {
+                    // otherwise, tally the metrics
+                    accuracy += eval.pctCorrect() / 100;
+                    recall += eval.recall(1);
+                    f_measure += eval.fMeasure(1);
+                }
             }
 
             // Calculate the averages
-            accuracy    /= num_evaluations;
-            recall      /= num_evaluations;
-            f_measure   /= num_evaluations;
+            accuracy    /= eval_count;
+            recall      /= eval_count;
+            f_measure   /= eval_count;
 
             summary.append(String.format("%-25s %-10.4f %-10.4f %-10.4f\n",
                     model_name, accuracy, recall, f_measure)
