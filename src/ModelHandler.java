@@ -2,7 +2,6 @@ import weka.classifiers.AbstractClassifier;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.immune.immunos.*;
 import weka.classifiers.trees.J48;
-import weka.core.Instances;
 
 import java.util.HashMap;
 

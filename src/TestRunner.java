@@ -4,77 +4,64 @@ import weka.core.Instances;
 
 import java.util.*;
 
-// Weka's Evaluation class does not allow for storage of the training and test dataset names, so we must create our
-// own custom class for this purpose.
-class EvaluationResult {
-    private String training_set_name;
-    private String testing_set_name;
-    private Evaluation evaluation;
-
-    public EvaluationResult(String training_set_name, String testing_set_name, Evaluation evaluation) {
-        this.training_set_name = training_set_name;
-        this.testing_set_name = testing_set_name;
-        this.evaluation = evaluation;
-    }
-
-    public String get_training_set_name() {
-        return training_set_name;
-    }
-
-    public String get_testing_set_name() {
-        return testing_set_name;
-    }
-
-    public Evaluation get_evaluation() {
-        return evaluation;
-    }
-}
-
 public class TestRunner {
+    private static final int NUM_OF_FOLDS = 10; // Cross-Fold Validation
+    private static final int SEED = 42;
+
     // Storage for evaluations produced by tests. Each
     private static Map<String, List<EvaluationResult>> eval_map = new HashMap<String, List<EvaluationResult>>();
 
-    public Evaluation run_test (AbstractClassifier model, Instances testing_data) throws Exception {
-            System.out.println("Testing '"+ model.toString());
-            Instances current_dataset = testing_data;
-            Evaluation eval = new Evaluation(testing_data);
-            eval.crossValidateModel(model, testing_data, 10, new Random(42));
+    // Runs a single test on a given dataset using the provided model
+    public Evaluation run_test (Map.Entry<String, AbstractClassifier> model_entry,
+                                Map.Entry<String, Instances> testing_set_entry) throws Exception {
+            System.out.println("Testing '"+ model_entry.getKey() + "' on dataset '" + testing_set_entry.getKey() + "'");
+            Instances current_dataset = testing_set_entry.getValue();
+            Evaluation eval = new Evaluation(testing_set_entry.getValue());
+            eval.crossValidateModel(
+                    model_entry.getValue(), testing_set_entry.getValue(), NUM_OF_FOLDS, new Random(SEED)
+            );
             return eval;
     }
 
-    public boolean train_model (AbstractClassifier model, Instances training_set) {
+    public boolean train_model (Map.Entry<String, AbstractClassifier> model_entry,
+                                Map.Entry<String, Instances> training_set_entry) {
         try {
-            model.buildClassifier(training_set);
+            model_entry.getValue().buildClassifier(training_set_entry.getValue());
+            System.out.println("Successfully trained model '" + model_entry.getKey() + "' on dataset '" + training_set_entry.getKey() + "'!");
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println("Could not train model '" + model_entry.getKey() + "' on dataset '" + training_set_entry.getKey() + "'");
             return false;
         }
         return true;
     }
 
+    // Helper method to run batch testing on a given Map of datasets.
+    public void run_tests (Map.Entry<String, AbstractClassifier> model_entry,
+                           Map<String, Instances> datasets, String training_set_name) {
+        // Results of evaluations are stored here, first checking if an entry already exists
+        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
+
+        for (Map.Entry<String, Instances> testing_set_entry : datasets.entrySet()) {
+            try {
+                Evaluation eval = run_test(model_entry, testing_set_entry);
+                evaluations.add(new EvaluationResult(training_set_name, testing_set_entry.getKey(), eval));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        eval_map.put(model_entry.getKey(), evaluations);
+    }
+
     // This is a cross-project defect prediction test. Meaning a model is trained on one dataset and then evaluated
     // on another.
-    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets, String training_set_name) {
+    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets) {
         for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
-            String model_name = model_entry.getKey();
-            AbstractClassifier model = model_entry.getValue();
-
-            if (!train_model(model, datasets.get(training_set_name))) {
-                System.out.println("Could not train model '" + model.toString() + "' on dataset '" + training_set_name + "'");
-                System.out.println("CPDP test aborted!");
-            } else {
-                List<EvaluationResult> evaluations = new ArrayList<>();
-                // If model successfully trained we can run our tests
-                for (Map.Entry<String, Instances> dataset_entry : datasets.entrySet()) {
-                    // Create an empty list to store the evaluation results for this model
-                    try {
-                        Evaluation eval = run_test(model, dataset_entry.getValue());
-                        evaluations.add(new EvaluationResult(training_set_name, dataset_entry.getKey(), eval));
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+            // Iterate training on each dataset
+            for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
+                if (train_model(model_entry, training_set_entry)) {
+                    run_tests(model_entry, datasets, training_set_entry.getKey());
                 }
-                eval_map.put(model_name, evaluations);
             }
         }
     }
@@ -134,7 +121,9 @@ public class TestRunner {
                     // otherwise, tally the metrics
                     accuracy += eval.pctCorrect() / 100;
                     recall += eval.recall(1);
-                    f_measure += eval.fMeasure(1);
+                    // If recall or precision is 0, f-measure will return NaN
+                    // This can be assumed as 0 and therefore removed from final results
+                    if (!Double.isNaN(eval.fMeasure(1))) f_measure += eval.fMeasure(1);
                 }
             }
 

@@ -38,7 +38,7 @@ public class Main {
             model_handler.load_models();
             loader.load_nasa_datasets();
 
-            test_runner.run_cpdp_test(model_handler, loader.get_datasets(), "CM1");
+            test_runner.run_cpdp_test(model_handler, loader.get_datasets());
             System.out.println("Test Evaluations");
             System.out.println(test_runner.evaluation_results_to_string());
             System.out.println("Test Summarisations");
