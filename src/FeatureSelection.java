@@ -1,3 +1,4 @@
+import org.w3c.dom.Attr;
 import weka.attributeSelection.*;
 import weka.core.Instances;
 import weka.filters.Filter;
@@ -26,12 +27,12 @@ public class FeatureSelection {
     public ASSearch                     get_search_method (String search_method)    { return search_methods.get(search_method); }
 
     // Returns a feature selector that has been trained on a given dataset
-    public AttributeSelection train_selector (String evaluator, String search_method, Instances training_set)
-            throws Exception {
+    public AttributeSelection train_selector (String evaluator, String search_method,
+                                              Instances training_set, Double threshold) throws Exception {
         AttributeSelection selector = new AttributeSelection();
         selector.setEvaluator(this.get_evaluator(evaluator));
-        if (Objects.equals(search_method, "Ranker")) {
-            double threshold = 0.02;
+        // Threshold is only used on Ranker search so ensure it is the right method
+        if (threshold != null && Objects.equals(search_method, "Ranker")) {
             Ranker ranker = new Ranker();
             ranker.setThreshold(threshold);
             selector.setSearch(ranker);
@@ -43,6 +44,12 @@ public class FeatureSelection {
         System.out.println ("Number of Attributes: " + selector.selectedAttributes().length);
         System.out.println ("Selected Attributes:  " + Arrays.toString(selector.selectedAttributes()));
         return selector;
+    }
+
+    // Convenience method without threshold
+    public AttributeSelection train_selector (String evaluator, String search_method,
+                                              Instances training_set) throws Exception {
+        train_selector(evaluator, search_method, training_set, null);
     }
 
     // Applies the specified filter to the given dataset, returning the filtered dataset

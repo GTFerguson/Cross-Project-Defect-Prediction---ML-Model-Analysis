@@ -103,43 +103,66 @@ public class TestRunner {
         eval_map.put(model_entry.getKey(), evaluations);
     }
 
-    // This is a cross-project defect prediction test. Meaning a model is trained on one dataset and then evaluated
-    // on another.
-    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
-        // For each model provided
-        for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
-            // Iterate training on each dataset
-            for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
-                // Now attempt to train model and run tests if successful
-                if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
-                    run_tests(model_entry, datasets, training_set_entry);
-                }
-            }
-        }
-    }
+//    // This is a cross-project defect prediction test. Meaning a model is trained on one dataset and then evaluated
+//    // on another.
+//    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
+//        // For each model provided
+//        for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
+//            // Iterate training on each dataset
+//            for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
+//                // Now attempt to train model and run tests if successful
+//                if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
+//                    run_tests(model_entry, datasets, training_set_entry);
+//                }
+//            }
+//        }
+//    }
 
     // Overloaded version to allow for feature selection
     public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
-                               String evaluator, String search_method) throws Exception {
+                               String evaluator, String search_method, Double threshold) throws Exception {
         FeatureSelection feature_selection = new FeatureSelection();
         // For each model provided
         for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
             // Iterate training on each dataset
             for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
-                AttributeSelection selector =
-                        feature_selection.train_selector(evaluator, search_method, training_set_entry.getValue());
-                Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
 
-                // Get the attributes that have been selected so they can be applied to the test sets
-                int[] selected_attributes = selector.selectedAttributes();
+                // No Feature Selection
+                if (evaluator == null && search_method == null) {
+                    // Now attempt to train model and run tests if successful
+                    if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
+                        run_tests(model_entry, datasets, training_set_entry);
+                    }
 
-                // Now attempt to train model and run tests if successful
-                if (train_model(model_entry, reduced_training_set, training_set_entry.getKey())) {
-                    run_tests(model_entry, datasets, training_set_entry.getKey(), selected_attributes);
+                // Feature Selection
+                } else {
+                    AttributeSelection selector = feature_selection.train_selector
+                            (evaluator, search_method, training_set_entry.getValue(), threshold);
+                    Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
+
+                    // Get the attributes that have been selected so they can be applied to the test sets
+                    int[] selected_attributes = selector.selectedAttributes();
+
+                    // Now attempt to train model and run tests if successful
+                    if (train_model(model_entry, reduced_training_set, training_set_entry.getKey())) {
+                        run_tests(model_entry, datasets, training_set_entry.getKey(), selected_attributes);
+                    }
                 }
             }
         }
     }
+
+    // Convenience method for no feature selection
+    public void run_cpdp_test(ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
+        run_cpdp_test(model_handler, datasets, null, null, null);
+    }
+
+    // Convenience method for feature selection without threshold
+    public void run_cpdp_test(ModelHandler model_handler, Map<String, Instances> datasets,
+                              String evaluator, String search_method) throws Exception {
+        run_cpdp_test(model_handler, datasets, evaluator, search_method, null);
+    }
+
     public String evaluation_results_to_string () {
         StringBuilder output = new StringBuilder();
         // Print header for the table
