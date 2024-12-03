@@ -1,4 +1,5 @@
 import weka.attributeSelection.AttributeSelection;
+import weka.attributeSelection.Ranker;
 import weka.classifiers.AbstractClassifier;
 import weka.classifiers.Evaluation;
 import weka.core.Instances;
@@ -10,7 +11,7 @@ public class TestRunner {
     private static final int SEED = 42;
 
     // Storage for evaluations produced by tests.
-    private static Map<String, List<EvaluationResult>> eval_map = new HashMap<String, List<EvaluationResult>>();
+    private Map<String, List<EvaluationResult>> eval_map = new HashMap<String, List<EvaluationResult>>();
 
     public boolean train_model (Map.Entry<String, AbstractClassifier> model_entry,
                                 Instances training_set, String training_set_key) {
@@ -48,7 +49,29 @@ public class TestRunner {
     // Helper method to run batch testing on a given Map of datasets.
     public void run_tests (Map.Entry<String, AbstractClassifier> model_entry,
                            Map<String, Instances> datasets,
-                           Map.Entry<String, Instances> training_set,
+                           Map.Entry<String, Instances> training_set) {
+
+        // Results of evaluations are stored here, first checking if an entry already exists
+        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
+
+        for (Map.Entry<String, Instances> testing_set_entry : datasets.entrySet()) {
+            // Run test and store evaluation data
+            try {
+                Evaluation eval = run_test(model_entry, testing_set_entry.getKey(), testing_set_entry.getValue());
+                evaluations.add(new EvaluationResult(training_set.getKey(), testing_set_entry.getKey(), eval));
+            } catch (Exception e) {
+                System.out.println("Test could not be performed.");
+                e.printStackTrace();
+            }
+        }
+        eval_map.put(model_entry.getKey(), evaluations);
+    }
+
+    // Overloaded for feature selection
+    // Helper method to run batch testing on a given Map of datasets.
+    public void run_tests (Map.Entry<String, AbstractClassifier> model_entry,
+                           Map<String, Instances> datasets,
+                           String training_set_name,
                            int[] selected_attributes) {
 
         // Results of evaluations are stored here, first checking if an entry already exists
@@ -68,10 +91,9 @@ public class TestRunner {
             // Run test and store evaluation data
             try {
                 Evaluation eval = run_test(model_entry, testing_set_entry.getKey(), reduced_testing_set);
-                evaluations.add(new EvaluationResult(training_set.getKey(), testing_set_entry.getKey(), eval));
+                evaluations.add(new EvaluationResult(training_set_name, testing_set_entry.getKey(), eval));
             } catch (Exception e) {
                 System.out.println("Test could not be performed.");
-                System.out.println("Training set attributes: " + training_set.getValue().numAttributes());
                 System.out.println("Original testing set attributes: " + testing_set_entry.getValue().numAttributes());
                 System.out.println("Reduced testing set attributes: " + reduced_testing_set.numAttributes());
                 System.out.println("Testing set class index: " + reduced_testing_set.classIndex());
@@ -84,14 +106,28 @@ public class TestRunner {
     // This is a cross-project defect prediction test. Meaning a model is trained on one dataset and then evaluated
     // on another.
     public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
+        // For each model provided
+        for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
+            // Iterate training on each dataset
+            for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
+                // Now attempt to train model and run tests if successful
+                if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
+                    run_tests(model_entry, datasets, training_set_entry);
+                }
+            }
+        }
+    }
+
+    // Overloaded version to allow for feature selection
+    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
+                               String evaluator, String search_method) throws Exception {
         FeatureSelection feature_selection = new FeatureSelection();
         // For each model provided
         for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
             // Iterate training on each dataset
             for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
                 AttributeSelection selector =
-                        feature_selection.train_selector("CFS Subset", "Best First", training_set_entry.getValue());
-
+                        feature_selection.train_selector(evaluator, search_method, training_set_entry.getValue());
                 Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
 
                 // Get the attributes that have been selected so they can be applied to the test sets
@@ -99,12 +135,11 @@ public class TestRunner {
 
                 // Now attempt to train model and run tests if successful
                 if (train_model(model_entry, reduced_training_set, training_set_entry.getKey())) {
-                    run_tests(model_entry, datasets, training_set_entry, selected_attributes);
+                    run_tests(model_entry, datasets, training_set_entry.getKey(), selected_attributes);
                 }
             }
         }
     }
-
     public String evaluation_results_to_string () {
         StringBuilder output = new StringBuilder();
         // Print header for the table
@@ -238,5 +273,4 @@ public class TestRunner {
         }
         return summary.toString();
     }
-
 }

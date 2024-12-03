@@ -63,15 +63,4 @@ public class DatasetLoader {
     public void set_dataset (String key, Instances dataset) {
         datasets.put(key, dataset);
     }
-
-    public void apply_feature_selection (AttributeSelection selector) throws Exception {
-        for (Map.Entry<String, Instances> entry : datasets.entrySet()) {
-            System.out.println("Number of attributes before selection: " + entry.getValue().numAttributes());
-            // Perform attribute selection on the dataset
-            selector.SelectAttributes(entry.getValue());
-            // Reduce dimensionality of the dataset
-            datasets.put(entry.getKey(), selector.reduceDimensionality(entry.getValue()));
-            System.out.println("Number of attributes after selection: " + entry.getValue().numAttributes());
-        }
-    }
 }

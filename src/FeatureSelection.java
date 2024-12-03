@@ -1,8 +1,11 @@
 import weka.attributeSelection.*;
 import weka.core.Instances;
 import weka.filters.Filter;
+
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class FeatureSelection {
     private Map<String, ASEvaluation> evaluators = new HashMap<>();
@@ -17,34 +20,47 @@ public class FeatureSelection {
         this.search_methods.put("Ranker", new Ranker());
     }
 
-    public Map<String, ASEvaluation> get_evaluators() {
-        return evaluators;
-    }
-
-    public ASEvaluation get_evaluator (String evaluator) {
-        return this.evaluators.get(evaluator);
-    }
-
-    public Map<String, ASSearch> get_search_methods() {
-        return search_methods;
-    }
-
-    public ASSearch get_search_method (String search_method) {
-        return this.search_methods.get(search_method);
-    }
+    public Map<String, ASEvaluation>    get_evaluators ()                           { return evaluators;                        }
+    public ASEvaluation                 get_evaluator (String evaluator)            { return evaluators.get(evaluator);         }
+    public Map<String, ASSearch>        get_search_methods ()                       { return search_methods;                    }
+    public ASSearch                     get_search_method (String search_method)    { return search_methods.get(search_method); }
 
     // Returns a feature selector that has been trained on a given dataset
-    public AttributeSelection train_selector (String evaluator, String search_method, Instances training_set) throws Exception {
+    public AttributeSelection train_selector (String evaluator, String search_method, Instances training_set)
+            throws Exception {
         AttributeSelection selector = new AttributeSelection();
         selector.setEvaluator(this.get_evaluator(evaluator));
-        selector.setSearch(this.get_search_method(search_method));
+        if (Objects.equals(search_method, "Ranker")) {
+            double threshold = 0.02;
+            Ranker ranker = new Ranker();
+            ranker.setThreshold(threshold);
+            selector.setSearch(ranker);
+            System.out.println("Threshold set to " + threshold);
+        } else {
+            selector.setSearch(this.get_search_method(search_method));
+        }
         selector.SelectAttributes(training_set);
+        System.out.println ("Number of Attributes: " + selector.selectedAttributes().length);
+        System.out.println ("Selected Attributes:  " + Arrays.toString(selector.selectedAttributes()));
         return selector;
     }
 
     // Applies the specified filter to the given dataset, returning the filtered dataset
     public Instances apply_feature_selection(Instances dataset, String evaluator, String search) throws Exception {
         AttributeSelection selector = this.train_selector(evaluator, search, dataset);
+        // Reduce dimensionality of the dataset
+        return selector.reduceDimensionality(dataset);
+    }
+
+    // Applies the specified filter to the given dataset, returning the filtered dataset
+    public Instances apply_feature_selection(
+            Instances dataset, String evaluator, String search, double threshold) throws Exception {
+        Ranker ranker = new Ranker();
+        ranker.setThreshold(threshold);
+
+        AttributeSelection selector = this.train_selector(evaluator, search, dataset);
+        selector.setSearch(ranker);
+
         // Reduce dimensionality of the dataset
         return selector.reduceDimensionality(dataset);
     }
