@@ -47,35 +47,37 @@ public class TestRunner {
     }
 
     // Helper method to run batch testing on a given Map of datasets.
-    public void run_tests (Map.Entry<String, AbstractClassifier> model_entry,
+    public List<EvaluationResult> run_tests (Map.Entry<String, AbstractClassifier> model_entry,
                            Map<String, Instances> datasets,
                            Map.Entry<String, Instances> training_set) {
 
         // Results of evaluations are stored here, first checking if an entry already exists
-        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
+//        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
+        List<EvaluationResult> evaluations = new ArrayList<>();
 
         for (Map.Entry<String, Instances> testing_set_entry : datasets.entrySet()) {
             // Run test and store evaluation data
             try {
                 Evaluation eval = run_test(model_entry, testing_set_entry.getKey(), testing_set_entry.getValue());
-                evaluations.add(new EvaluationResult(training_set.getKey(), testing_set_entry.getKey(), eval));
+                evaluations.add(EvaluationResult.create(model_entry.getKey(), training_set.getKey(), testing_set_entry.getKey(), eval));
             } catch (Exception e) {
                 System.out.println("Test could not be performed.");
                 e.printStackTrace();
             }
         }
-        eval_map.put(model_entry.getKey(), evaluations);
+        return evaluations;
     }
 
     // Overloaded for feature selection
     // Helper method to run batch testing on a given Map of datasets.
-    public void run_tests (Map.Entry<String, AbstractClassifier> model_entry,
+    public List<EvaluationResult> run_tests (Map.Entry<String, AbstractClassifier> model_entry,
                            Map<String, Instances> datasets,
                            String training_set_name,
                            int[] selected_attributes) {
 
         // Results of evaluations are stored here, first checking if an entry already exists
-        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
+//        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
+        List<EvaluationResult> evaluations = new ArrayList<>();
 
         for (Map.Entry<String, Instances> testing_set_entry : datasets.entrySet()) {
             Instances testing_set = testing_set_entry.getValue();
@@ -91,7 +93,7 @@ public class TestRunner {
             // Run test and store evaluation data
             try {
                 Evaluation eval = run_test(model_entry, testing_set_entry.getKey(), reduced_testing_set);
-                evaluations.add(new EvaluationResult(training_set_name, testing_set_entry.getKey(), eval));
+                evaluations.add(EvaluationResult.create(model_entry.getKey(), training_set_name, testing_set_entry.getKey(), eval));
             } catch (Exception e) {
                 System.out.println("Test could not be performed.");
                 System.out.println("Original testing set attributes: " + testing_set_entry.getValue().numAttributes());
@@ -100,7 +102,8 @@ public class TestRunner {
                 e.printStackTrace();
             }
         }
-        eval_map.put(model_entry.getKey(), evaluations);
+        return evaluations;
+//        eval_map.put(model_entry.getKey(), evaluations);
     }
 
 //    // This is a cross-project defect prediction test. Meaning a model is trained on one dataset and then evaluated
@@ -119,9 +122,12 @@ public class TestRunner {
 //    }
 
     // Overloaded version to allow for feature selection
-    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
-                               String evaluator, String search_method, Double threshold) throws Exception {
+    public List<EvaluationResult> run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
+                               String evaluator, String search_method,
+                               Double start_threshold, Double end_threshold, Double step) throws Exception {
         FeatureSelection feature_selection = new FeatureSelection();
+        List<EvaluationResult> master_eval_list = new ArrayList<>();
+
         // For each model provided
         for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
             // Iterate training on each dataset
@@ -131,39 +137,57 @@ public class TestRunner {
                 if (evaluator == null && search_method == null) {
                     // Now attempt to train model and run tests if successful
                     if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
-                        run_tests(model_entry, datasets, training_set_entry);
+                        List<EvaluationResult> evaluations = run_tests(model_entry, datasets, training_set_entry);
+                        master_eval_list.addAll(evaluations);
                     }
 
                 // Feature Selection
                 } else {
-                    AttributeSelection selector = feature_selection.train_selector
-                            (evaluator, search_method, training_set_entry.getValue(), threshold);
-                    Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
+                    for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
+                        System.out.printf("Testing with threshold: %.2f%n", threshold);
+                        AttributeSelection selector = feature_selection.train_selector
+                                (evaluator, search_method, training_set_entry.getValue(), threshold);
+                        Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
 
-                    // Get the attributes that have been selected so they can be applied to the test sets
-                    int[] selected_attributes = selector.selectedAttributes();
+                        // Get the attributes that have been selected so they can be applied to the test sets
+                        int[] selected_attributes = selector.selectedAttributes();
 
-                    // Now attempt to train model and run tests if successful
-                    if (train_model(model_entry, reduced_training_set, training_set_entry.getKey())) {
-                        run_tests(model_entry, datasets, training_set_entry.getKey(), selected_attributes);
+                        // Now attempt to train model and run tests if successful
+                        if (train_model(model_entry, reduced_training_set, training_set_entry.getKey())) {
+                            List<EvaluationResult> evaluations = run_tests(model_entry, datasets, training_set_entry.getKey(), selected_attributes);
+                            // Add metadata and combine results
+                            for (EvaluationResult result : evaluations) {
+                                result.set_evaluator(evaluator);
+                                result.set_search_method(search_method);
+                                result.set_threshold(threshold);
+                                master_eval_list.add(result);
+                            }
+                        }
                     }
                 }
             }
         }
+        return master_eval_list;
     }
 
     // Convenience method for no feature selection
-    public void run_cpdp_test(ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
-        run_cpdp_test(model_handler, datasets, null, null, null);
+    public List<EvaluationResult> run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
+        return run_cpdp_test(model_handler, datasets, null, null, null);
     }
 
     // Convenience method for feature selection without threshold
-    public void run_cpdp_test(ModelHandler model_handler, Map<String, Instances> datasets,
-                              String evaluator, String search_method) throws Exception {
-        run_cpdp_test(model_handler, datasets, evaluator, search_method, null);
+    public List<EvaluationResult> run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
+                                                   String evaluator, String search_method) throws Exception {
+        return run_cpdp_test(model_handler, datasets, evaluator, search_method, null);
     }
 
-    public String evaluation_results_to_string () {
+    // Convenience method for feature selection with single threshold use
+    public List<EvaluationResult> run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
+                              String evaluator, String search_method, Double threshold) throws Exception {
+        return run_cpdp_test(model_handler, datasets, evaluator, search_method, threshold, threshold, 1.0);
+    }
+
+    public String evaluation_results_to_string (List<EvaluationResult> evaluations) {
         StringBuilder output = new StringBuilder();
         // Print header for the table
         output.append(
@@ -172,21 +196,19 @@ public class TestRunner {
         );
         output.append("---------------------------------------------------------------------------------------------------\n");
 
-        for (Map.Entry<String, List<EvaluationResult>> entry : eval_map.entrySet()) {
-            String model_name = entry.getKey().trim();
-            for (EvaluationResult result : entry.getValue()) {
-                Evaluation eval = result.get_evaluation();
-                // Print metrics in a table row
-                output.append(String.format("%-25s %-20s %-20s %-10.4f %-10.4f %-10.4f\n",
-                        model_name, result.get_training_set_name(), result.get_testing_set_name(),
-                        eval.pctCorrect() / 100, eval.recall(1), eval.fMeasure(1))
-                );
-            }
+        for (EvaluationResult evaluation : evaluations) {
+            Evaluation eval = evaluation.get_evaluation();
+            // Print metrics in a table row
+            output.append(String.format("%-25s %-20s %-20s %-10.4f %-10.4f %-10.4f\n",
+                    evaluation.get_training_set_name(), evaluation.get_training_set_name(),
+                    evaluation.get_testing_set_name(),
+                    eval.pctCorrect() / 100, eval.recall(1), eval.fMeasure(1))
+            );
         }
         return output.toString();
     }
 
-    public String summarise_results () {
+    public String summarise_results (List<EvaluationResult> evaluations) {
         StringBuilder summary = new StringBuilder();
 
         // Print header for the table
@@ -196,47 +218,43 @@ public class TestRunner {
         );
         summary.append("---------------------------------------------------------\n");
 
-        for (Map.Entry<String, List<EvaluationResult>> entry : eval_map.entrySet()) {
-            String model_name = entry.getKey();
-            List<EvaluationResult> results = entry.getValue();
+        // Group evaluations by model name
+        Map<String, List<EvaluationResult>> grouped_by_model = new HashMap<>();
+        for (EvaluationResult evaluation : evaluations) {
+            grouped_by_model.computeIfAbsent(evaluation.get_model_name(), k -> new ArrayList<>()).add(evaluation);
+        }
 
-            // Variables to accumulate the metrics
+        // Calculate averages for each model
+        for (Map.Entry<String, List<EvaluationResult>> entry : grouped_by_model.entrySet()) {
+            String model_name = entry.getKey();
+            List<EvaluationResult> modelResults = entry.getValue();
+
             double accuracy = 0.0;
             double recall = 0.0;
             double f_measure = 0.0;
-            int eval_count = results.size();
+            int eval_count = modelResults.size();
 
-            // Sum up the metrics
-            for (EvaluationResult result : results) {
+            for (EvaluationResult result : modelResults) {
                 Evaluation eval = result.get_evaluation();
-
-                // Check if the test and training set are the same...
-                if (result.get_testing_set_name().equals(result.get_training_set_name())) {
-                    // if so we don't include it in the summary and reduce the eval count
-                    --eval_count;
-                } else {
-                    // otherwise, tally the metrics
-                    accuracy += eval.pctCorrect() / 100;
-                    recall += eval.recall(1);
-                    // If recall or precision is 0, f-measure will return NaN
-                    // This can be assumed as 0 and therefore removed from final results
-                    if (!Double.isNaN(eval.fMeasure(1))) f_measure += eval.fMeasure(1);
+                accuracy += eval.pctCorrect() / 100;
+                recall += eval.recall(1);
+                if (!Double.isNaN(eval.fMeasure(1))) {
+                    f_measure += eval.fMeasure(1);
                 }
             }
 
-            // Calculate the averages
-            accuracy    /= eval_count;
-            recall      /= eval_count;
-            f_measure   /= eval_count;
+            // Calculate averages
+            accuracy /= eval_count;
+            recall /= eval_count;
+            f_measure /= eval_count;
 
             summary.append(String.format("%-25s %-10.4f %-10.4f %-10.4f\n",
-                    model_name, accuracy, recall, f_measure)
-            );
+                    model_name, accuracy, recall, f_measure));
         }
         return summary.toString();
     }
 
-    public String summarise_results_per_training_set () {
+    public String summarise_results_per_training_set(List<EvaluationResult> evaluations) {
         StringBuilder summary = new StringBuilder();
 
         // Print header for the summary table
@@ -244,56 +262,48 @@ public class TestRunner {
                 "Model Name", "Training Set", "Count", "Accuracy", "Recall", "F-Measure"));
         summary.append("-----------------------------------------------------------------------------------------\n");
 
-        Map<String, Map<String, List<EvaluationResult>>> sorted_evals = new HashMap<>();
-        // Iterate through the eval_map to get model names and their evaluations
-        for (Map.Entry<String, List<EvaluationResult>> entry : eval_map.entrySet()) {
-            String model_name = entry.getKey();
-
-            // Group results by training set name
-            for (EvaluationResult eval_result : entry.getValue()) {
-                String training_set_name = eval_result.get_training_set_name();
-
-                // This complicated mess checks retrieves existing record if it exists and adds eval_result
-                sorted_evals
-                        .computeIfAbsent(model_name, k -> new HashMap<>())
-                        .computeIfAbsent(training_set_name, k -> new ArrayList<>()).add(eval_result);
-            }
+        // Group results by model and training set
+        Map<String, Map<String, List<EvaluationResult>>> grouped_evaluations = new HashMap<>();
+        for (EvaluationResult result : evaluations) {
+            grouped_evaluations
+                    .computeIfAbsent(result.get_training_set_name(), k -> new HashMap<>())
+                    .computeIfAbsent(result.get_testing_set_name(), k -> new ArrayList<>())
+                    .add(result);
         }
 
-        // For each model...
-        for (Map.Entry<String, Map<String, List<EvaluationResult>>> model_results_entry : sorted_evals.entrySet()) {
-            String model_name = model_results_entry.getKey();
-            Map<String, List<EvaluationResult>> model_results = model_results_entry.getValue();
+        // Calculate averages for each training set
+        for (Map.Entry<String, Map<String, List<EvaluationResult>>> model_entry : grouped_evaluations.entrySet()) {
+            String model_name = model_entry.getKey();
+            Map<String, List<EvaluationResult>> training_set_evals = model_entry.getValue();
 
-            // for each training set...
-            for (Map.Entry<String, List<EvaluationResult>> training_set_results : model_results.entrySet()) {
-                List<EvaluationResult> eval_list = training_set_results.getValue();
+            for (Map.Entry<String, List<EvaluationResult>> training_set_entry : training_set_evals.entrySet()) {
+                String training_set_name = training_set_entry.getKey();
+                List<EvaluationResult> eval_list = training_set_entry.getValue();
+
                 int eval_count = eval_list.size();
+                double accuracy = 0.0;
+                double recall = 0.0;
+                double f_measure = 0.0;
 
-                // Variables to store our tallies
-                double accuracy     = 0.0;
-                double recall       = 0.0;
-                double f_measure    = 0.0;
-
-                // Iterate over all EvaluationResult objects to calculate totals
-                for (EvaluationResult eval_result : eval_list) {
-                    Evaluation eval = eval_result.get_evaluation();
-
-                    accuracy    += eval.pctCorrect() / 100;
-                    recall      += eval.recall(1);
-                    if (!Double.isNaN(eval.fMeasure(1))) f_measure += eval.fMeasure(1);
+                for (EvaluationResult evaluation : eval_list) {
+                    Evaluation eval = evaluation.get_evaluation();
+                    accuracy += eval.pctCorrect() / 100;
+                    recall += eval.recall(1);
+                    if (!Double.isNaN(eval.fMeasure(1))) {
+                        f_measure += eval.fMeasure(1);
+                    }
                 }
 
                 // Calculate averages
-                accuracy    /= eval_count;
-                recall      /= eval_count;
-                f_measure   /= eval_count;
+                accuracy /= eval_count;
+                recall /= eval_count;
+                f_measure /= eval_count;
 
-                // Print metrics for the current model and training set
                 summary.append(String.format("%-25s %-20s %-10d %-10.4f %-10.4f %-10.4f\n",
-                        model_name, training_set_results.getKey(), eval_count, accuracy, recall, f_measure));
+                        model_name, training_set_name, eval_count, accuracy, recall, f_measure));
             }
         }
+
         return summary.toString();
     }
 }

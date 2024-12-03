@@ -4,18 +4,21 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 
 public class EvaluationsDB {
     // Constants
     private static final String db_name = "evaluations.db";
     private static final String url = "jdbc:sqlite:" + db_name;
+    private Connection conn;
 
     private static final String create_evaluation_table_query = """
         CREATE TABLE IF NOT EXISTS evaluations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             evaluator TEXT,
             search_method TEXT,
+            threshold REAL,
             model_name TEXT NOT NULL,
             training_set TEXT NOT NULL,
             testing_set TEXT NOT NULL,
@@ -26,65 +29,66 @@ public class EvaluationsDB {
     """;
 
     private static final String insert_evaluation_query = """
-        INSERT INSERT INTO evaluations (
-            model_name, evaluator, search_method, training_set, testing_set, accuracy, recall, f_measure
-        ) VALUES (?,?,?,?,?,?,?,?)
+        INSERT INTO evaluations (
+            model_name, evaluator, search_method, threshold, training_set, testing_set, accuracy, recall, f_measure
+        ) VALUES (?,?,?,?,?,?,?,?,?)
     """;
 
-    public Connection connect () {
-        Connection conn = null;
-        try {
+    public void connect () throws SQLException {
+        if (conn == null || conn.isClosed()) {
             conn = DriverManager.getConnection(url);
-            if (conn != null) {
-                System.out.println("Database has been created: " + db_name);
-            }
-        } catch (SQLException e) {
-            System.err.println(e.getMessage());
+            System.out.println("Connected to database: " + db_name);
         }
-        return conn;
+    }
+
+    public void disconnect() throws SQLException {
+        if (conn != null && !conn.isClosed()) {
+            conn.close();
+            System.out.println("Disconnected from database.");
+        }
     }
 
     public void startup () throws SQLException {
-        Connection conn = connect();
-
-        if (conn != null) {
-            var statement = conn.createStatement();
-            statement.execute(create_evaluation_table_query);
-        }
-
-        conn.close();
+        connect();
+        var statement = conn.createStatement();
+        statement.execute(create_evaluation_table_query);
+        disconnect();
     }
 
     public void insert_evaluation (
-            String model_name, String training_set_name, String testing_set_name,
-            String evaluator, String search_method,
-            Double accuracy, Double recall, Double f_measure
-    ) throws SQLException {
-        Connection conn = connect();
-
-        if (conn != null) {
-            PreparedStatement prep_statement = conn.prepareStatement(insert_evaluation_query);
-            prep_statement.setString(1, model_name);
-            prep_statement.setString(2, evaluator);
-            prep_statement.setString(3, search_method);
-            prep_statement.setString(4, training_set_name);
-            prep_statement.setString(5, testing_set_name);
-            prep_statement.setDouble(6, accuracy);
-            prep_statement.setDouble(7, recall);
-            prep_statement.setDouble(8, f_measure);
-            prep_statement.executeUpdate();
-        }
+            String model_name, String evaluator, String search_method, Double threshold,
+            String training_set_name, String testing_set_name,
+            Double accuracy, Double recall, Double f_measure) throws SQLException {
+        connect();
+        PreparedStatement prep_statement = conn.prepareStatement(insert_evaluation_query);
+        prep_statement.setString(1, model_name);
+        prep_statement.setString(2, evaluator);
+        prep_statement.setString(3, search_method);
+        prep_statement.setDouble(4, threshold);
+        prep_statement.setString(5, training_set_name);
+        prep_statement.setString(6, testing_set_name);
+        prep_statement.setDouble(7, accuracy);
+        prep_statement.setDouble(8, recall);
+        prep_statement.setDouble(9, f_measure);
+        prep_statement.executeUpdate();
+        disconnect();
     }
 
-    // Override method for easy insertion for map entries
-    public void insert_evaluation (Map.Entry<String, EvaluationResult> eval_result_entry) throws SQLException {
-        EvaluationResult eval_result = eval_result_entry.getValue();
-        Evaluation eval = eval_result.get_evaluation();
-
+    // Convenience method for easy insertion for map entries
+    public void insert_evaluation (EvaluationResult evaluation) throws SQLException {
+        Evaluation eval = evaluation.get_evaluation();
+        System.out.println("Training Set: " + evaluation.get_training_set_name());
         insert_evaluation(
-            eval_result_entry.getKey(), eval_result.get_evaluator(), eval_result.get_search_method(),
-            eval_result.get_training_set_name(), eval_result.get_training_set_name(),
+                evaluation.get_model_name(), evaluation.get_evaluator(),
+                evaluation.get_search_method(), evaluation.get_threshold(),
+                evaluation.get_training_set_name(), evaluation.get_testing_set_name(),
             eval.pctCorrect()/100, eval.recall(1), eval.fMeasure(1)
         );
+    }
+
+    public void insert_evaluations (List<EvaluationResult> evaluations) throws SQLException {
+        for (EvaluationResult evaluation : evaluations) {
+            insert_evaluation(evaluation);
+        }
     }
 }

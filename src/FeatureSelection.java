@@ -49,7 +49,7 @@ public class FeatureSelection {
     // Convenience method without threshold
     public AttributeSelection train_selector (String evaluator, String search_method,
                                               Instances training_set) throws Exception {
-        train_selector(evaluator, search_method, training_set, null);
+        return train_selector(evaluator, search_method, training_set, null);
     }
 
     // Applies the specified filter to the given dataset, returning the filtered dataset

@@ -11,11 +11,11 @@ public class ModelHandler {
 
     public ModelHandler () {
         this.load_model("Immunos-1",        Immunos1.class);
-        this.load_model("Immunos-2",        Immunos2.class);
-        this.load_model("Immunos-99",       Immunos99.class);
-        this.load_model("J48",              J48.class);
-        this.load_model("Naive Bayes",      NaiveBayes.class);
-        this.load_model("AIRS2 Parallel",   AIRS2Parallel.class);
+//        this.load_model("Immunos-2",        Immunos2.class);
+//        this.load_model("Immunos-99",       Immunos99.class);
+//        this.load_model("J48",              J48.class);
+//        this.load_model("Naive Bayes",      NaiveBayes.class);
+//        this.load_model("AIRS2 Parallel",   AIRS2Parallel.class);
     }
 
     public void load_model (String model_name, Class<? extends AbstractClassifier> model_class) {
