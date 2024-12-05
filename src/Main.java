@@ -91,6 +91,18 @@ public class Main {
         }
     }
 
+    public static double[] input_threshold_values () {
+        Scanner scanner = new Scanner(System.in);
+        double[] thresholds = new double[3];
+        System.out.println("Enter starting threshold value: ");
+        thresholds[0] = scanner.nextDouble();
+        System.out.println("Enter end threshold value: ");
+        thresholds[1] = scanner.nextDouble();
+        System.out.println("Enter threshold step value: ");
+        thresholds[2] = scanner.nextDouble();
+        return thresholds;
+    }
+
     public static void test_menu (ModelHandler model_handler, DatasetLoader dataset_loader, EvaluationsDB eval_db)
             throws Exception {
         System.out.println("1: No Feature Selection");
@@ -101,27 +113,30 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
         int user_input = scanner.nextInt();
         List<EvaluationResult> evaluations = new ArrayList<>();
+        double[] thresholds = new double[3];
         switch (user_input) {
             case 1: // No Feature Selection
                 evaluations = run_tests(model_handler, dataset_loader);
                 break;
             case 2: // CFS
-                evaluations = run_tests(model_handler, dataset_loader, "CFS Subset", "Best First", 1.0, 1.0, 1.0);
+                evaluations = run_tests(
+                        model_handler, dataset_loader, "CFS Subset", "Best First",
+                        1.0, 1.0, 1.0
+                );
                 break;
             case 3: // Info Gain
-                System.out.println("Enter starting threshold value: ");
-                double start_threshold = scanner.nextDouble();
-                System.out.println("Enter end threshold value: ");
-                double end_threshold = scanner.nextDouble();
-                System.out.println("Enter threshold step value: ");
-                double step = scanner.nextDouble();
+                thresholds = input_threshold_values();
                 evaluations = run_tests(
                         model_handler, dataset_loader, "Info Gain", "Ranker",
-                        start_threshold, end_threshold, step
+                        thresholds[0], thresholds[1], thresholds[2]
                 );
                 break;
             case 4: // Gain Ratio
-                evaluations = run_tests(model_handler, dataset_loader, "Gain Ratio", "Ranker", 0.01, 0.1, 0.01);
+                thresholds = input_threshold_values();
+                evaluations = run_tests(
+                        model_handler, dataset_loader, "Gain Ratio", "Ranker",
+                        thresholds[0], thresholds[1], thresholds[2]
+                );
                 break;
             default:
                 break;

@@ -123,6 +123,7 @@ public class TestRunner {
                 for (EvaluationResult result : evaluations) {
                     result.set_evaluator(evaluator);
                     result.set_search_method(search_method);
+                    System.out.printf("Setting evalulation to %s and search method to %s!!%n", evaluator, search_method);
                     if (threshold != null) result.set_threshold(threshold);
                 }
             }
@@ -135,10 +136,11 @@ public class TestRunner {
     private List<EvaluationResult> perform_model_cpdp_tests (
             Map.Entry<String, AbstractClassifier> model_entry,
             String training_set_name, Instances training_set,
-            Map<String, Instances> datasets, int[] selected_attributes) throws Exception {
+            Map<String, Instances> datasets, int[] selected_attributes,
+            String evaluator, String search_method) throws Exception {
         return perform_model_cpdp_tests(
                 model_entry, training_set_name, training_set, datasets, selected_attributes,
-                null, null, null
+                evaluator, search_method, null
         );
     }
 
@@ -178,6 +180,7 @@ public class TestRunner {
 
                 // Feature Selection
                 } else {
+                    // For non-ranker search methods, such as the kind used by CFS
                     if (!search_method.equals("Ranker")) {
                         // Create a deep copy of the training set to avoid modifying the original
                         Instances training_set = new Instances(training_set_entry.getValue());
@@ -195,7 +198,7 @@ public class TestRunner {
                         // Run the relevant tests on our model
                         List<EvaluationResult> model_evaluations = perform_model_cpdp_tests(
                                 model_entry, training_set_entry.getKey(), reduced_training_set,
-                                datasets, selected_attributes
+                                datasets, selected_attributes, evaluator, search_method
                         );
 
                         master_eval_list.addAll(model_evaluations);
@@ -203,7 +206,6 @@ public class TestRunner {
                     } else { // Ranker search method require threshold values
                         for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
                             System.out.printf("Testing with threshold: %.2f%n", threshold);
-                            System.out.printf("Attributes: %d%n", training_set_entry.getValue().numAttributes());
                             AttributeSelection selector = feature_selection.train_selector (
                                     evaluator, search_method, training_set_entry.getValue(), threshold
                             );
