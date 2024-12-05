@@ -13,23 +13,40 @@ public class TestRunner {
     // Storage for evaluations produced by tests.
     private Map<String, List<EvaluationResult>> eval_map = new HashMap<String, List<EvaluationResult>>();
 
-    public boolean train_model (Map.Entry<String, AbstractClassifier> model_entry,
-                                Instances training_set, String training_set_key) {
+    public boolean train_model (String model_name, AbstractClassifier model,
+                                String training_set_name, Instances training_set) {
         try {
-            model_entry.getValue().buildClassifier(training_set);
-            System.out.println("Successfully trained model '" + model_entry.getKey() + "' on dataset '" + training_set_key + "'!");
+            model.buildClassifier(training_set);
+            System.out.println("Successfully trained model '" + model_name + "' on dataset '" + training_set_name + "'!");
         } catch (Exception e) {
+            System.out.println("Could not train model '" + model_name + "' on dataset '" + training_set_name + "'");
             e.printStackTrace();
-            System.out.println("Could not train model '" + model_entry.getKey() + "' on dataset '" + training_set_key + "'");
             return false;
         }
         return true;
     }
 
+    // Convenience method to pass Map entries
+    public boolean train_model (Map.Entry<String, AbstractClassifier> model_entry,
+                                Map.Entry<String, Instances> training_set_entry) {
+        return train_model(
+                model_entry.getKey(), model_entry.getValue(),
+                training_set_entry.getKey(), training_set_entry.getValue()
+        );
+    }
+
+    // Convenience method to pass Map entries
+    public boolean train_model (Map.Entry<String, AbstractClassifier> model_entry,
+                                String training_set_name, Instances training_set) {
+        return train_model(
+                model_entry.getKey(), model_entry.getValue(),
+                training_set_name, training_set
+        );
+    }
     // Runs a single test on a given dataset using the provided model
     public Evaluation run_test (Map.Entry<String, AbstractClassifier> model_entry,
                                 String testing_set_name, Instances testing_set) throws Exception {
-            System.out.println("Testing '"+ model_entry.getKey() + "' on dataset '" + testing_set_name + "'");
+            System.out.printf("Testing '%s' on dataset '%s'%n", model_entry.getKey(), testing_set_name);
             Instances current_dataset = testing_set;
             Evaluation eval = new Evaluation(testing_set);
             eval.evaluateModel(model_entry.getValue(), testing_set);
@@ -47,47 +64,27 @@ public class TestRunner {
     }
 
     // Helper method to run batch testing on a given Map of datasets.
-    public List<EvaluationResult> run_tests (Map.Entry<String, AbstractClassifier> model_entry,
-                           Map<String, Instances> datasets,
-                           Map.Entry<String, Instances> training_set) {
+    public List<EvaluationResult> run_tests (
+            Map.Entry<String, AbstractClassifier> model_entry,
+            Map<String, Instances> datasets,
+            String training_set_name,
+            int[] selected_attributes) {
 
         // Results of evaluations are stored here, first checking if an entry already exists
-//        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
         List<EvaluationResult> evaluations = new ArrayList<>();
 
         for (Map.Entry<String, Instances> testing_set_entry : datasets.entrySet()) {
-            // Run test and store evaluation data
-            try {
-                Evaluation eval = run_test(model_entry, testing_set_entry.getKey(), testing_set_entry.getValue());
-                evaluations.add(EvaluationResult.create(model_entry.getKey(), training_set.getKey(), testing_set_entry.getKey(), eval));
-            } catch (Exception e) {
-                System.out.println("Test could not be performed.");
-                e.printStackTrace();
-            }
-        }
-        return evaluations;
-    }
+            // Deep copy to ensure no changes are made to the original datasets
+            Instances reduced_testing_set = new Instances(testing_set_entry.getValue());
 
-    // Overloaded for feature selection
-    // Helper method to run batch testing on a given Map of datasets.
-    public List<EvaluationResult> run_tests (Map.Entry<String, AbstractClassifier> model_entry,
-                           Map<String, Instances> datasets,
-                           String training_set_name,
-                           int[] selected_attributes) {
-
-        // Results of evaluations are stored here, first checking if an entry already exists
-//        List<EvaluationResult> evaluations = eval_map.getOrDefault(model_entry.getKey(), new ArrayList<>());
-        List<EvaluationResult> evaluations = new ArrayList<>();
-
-        for (Map.Entry<String, Instances> testing_set_entry : datasets.entrySet()) {
-            Instances testing_set = testing_set_entry.getValue();
-            Instances reduced_testing_set = testing_set;
-
-            // Remove all attributes not selected by the training selector
-            for (int i = testing_set.numAttributes() - 1; i >= 0; i--) {
-                if (!array_contains(selected_attributes, i)) {
-                    reduced_testing_set.deleteAttributeAt(i);
+            // If feature selection is applied remove all attributes not selected by the training selector
+            if (selected_attributes != null) {
+                for (int i = reduced_testing_set.numAttributes() - 1; i >= 0; i--) {
+                    if (!array_contains(selected_attributes, i)) {
+                        reduced_testing_set.deleteAttributeAt(i);
+                    }
                 }
+                System.out.printf("Reduced attributes of '%s' to %d%n", training_set_name, reduced_testing_set.numAttributes());
             }
 
             // Run test and store evaluation data
@@ -96,35 +93,71 @@ public class TestRunner {
                 evaluations.add(EvaluationResult.create(model_entry.getKey(), training_set_name, testing_set_entry.getKey(), eval));
             } catch (Exception e) {
                 System.out.println("Test could not be performed.");
-                System.out.println("Original testing set attributes: " + testing_set_entry.getValue().numAttributes());
-                System.out.println("Reduced testing set attributes: " + reduced_testing_set.numAttributes());
-                System.out.println("Testing set class index: " + reduced_testing_set.classIndex());
+                if (selected_attributes != null) {
+                    System.out.println("Original testing set attributes: " + testing_set_entry.getValue().numAttributes());
+                    System.out.println("Reduced testing set attributes: " + reduced_testing_set.numAttributes());
+                    System.out.println("Testing set class index: " + reduced_testing_set.classIndex());
+                }
                 e.printStackTrace();
             }
         }
         return evaluations;
-//        eval_map.put(model_entry.getKey(), evaluations);
     }
 
-//    // This is a cross-project defect prediction test. Meaning a model is trained on one dataset and then evaluated
-//    // on another.
-//    public void run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets) throws Exception {
-//        // For each model provided
-//        for (Map.Entry<String, AbstractClassifier> model_entry: model_handler.get_model_map().entrySet()) {
-//            // Iterate training on each dataset
-//            for (Map.Entry<String, Instances> training_set_entry : datasets.entrySet()) {
-//                // Now attempt to train model and run tests if successful
-//                if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
-//                    run_tests(model_entry, datasets, training_set_entry);
-//                }
-//            }
-//        }
-//    }
+    // This is a helper method that trains a given model on the datasets provided, as well as testing it on them
+    private List<EvaluationResult> perform_model_cpdp_tests (
+            Map.Entry<String, AbstractClassifier> model_entry, String training_set_name, Instances training_set,
+            Map<String, Instances> datasets, int[] selected_attributes,
+            String evaluator, String search_method, Double threshold) throws Exception {
+
+        List<EvaluationResult> model_evaluations = new ArrayList<>();
+
+        // Attempt to train the model, if successful run tests
+        if (train_model(model_entry, training_set_name, training_set)) {
+            List<EvaluationResult> evaluations = run_tests(
+                    model_entry, datasets, training_set_name, selected_attributes
+            );
+
+            // Add metadata for feature selection if used
+            if (selected_attributes != null) {
+                for (EvaluationResult result : evaluations) {
+                    result.set_evaluator(evaluator);
+                    result.set_search_method(search_method);
+                    if (threshold != null) result.set_threshold(threshold);
+                }
+            }
+            model_evaluations.addAll(evaluations);
+        }
+        return model_evaluations;
+    }
+
+    // Convenience method to perform model test with feature selection but no set threshold values
+    private List<EvaluationResult> perform_model_cpdp_tests (
+            Map.Entry<String, AbstractClassifier> model_entry,
+            String training_set_name, Instances training_set,
+            Map<String, Instances> datasets, int[] selected_attributes) throws Exception {
+        return perform_model_cpdp_tests(
+                model_entry, training_set_name, training_set, datasets, selected_attributes,
+                null, null, null
+        );
+    }
+
+    // Convenience method to perform model test without feature selection
+    private List<EvaluationResult> perform_model_cpdp_tests (
+            Map.Entry<String, AbstractClassifier> model_entry,
+            String training_set_name, Instances training_set,
+            Map<String, Instances> datasets) throws Exception {
+        return perform_model_cpdp_tests(
+                model_entry, training_set_name, training_set, datasets,
+                null, null, null, null
+        );
+    }
 
     // Overloaded version to allow for feature selection
-    public List<EvaluationResult> run_cpdp_test (ModelHandler model_handler, Map<String, Instances> datasets,
-                               String evaluator, String search_method,
-                               Double start_threshold, Double end_threshold, Double step) throws Exception {
+    public List<EvaluationResult> run_cpdp_test (
+            ModelHandler model_handler, Map<String, Instances> datasets,
+            String evaluator, String search_method,
+            Double start_threshold, Double end_threshold, Double step) throws Exception {
         FeatureSelection feature_selection = new FeatureSelection();
         List<EvaluationResult> master_eval_list = new ArrayList<>();
 
@@ -136,32 +169,54 @@ public class TestRunner {
                 // No Feature Selection
                 if (evaluator == null && search_method == null) {
                     // Now attempt to train model and run tests if successful
-                    if (train_model(model_entry, training_set_entry.getValue(), training_set_entry.getKey())) {
-                        List<EvaluationResult> evaluations = run_tests(model_entry, datasets, training_set_entry);
+                    if (train_model(model_entry, training_set_entry)) {
+                        List<EvaluationResult> evaluations = run_tests(
+                                model_entry, datasets, training_set_entry.getKey(), null
+                        );
                         master_eval_list.addAll(evaluations);
                     }
 
                 // Feature Selection
                 } else {
-                    for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
-                        System.out.printf("Testing with threshold: %.2f%n", threshold);
-                        AttributeSelection selector = feature_selection.train_selector
-                                (evaluator, search_method, training_set_entry.getValue(), threshold);
-                        Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
+                    if (!search_method.equals("Ranker")) {
+                        // Create a deep copy of the training set to avoid modifying the original
+                        Instances training_set = new Instances(training_set_entry.getValue());
+
+                        // Build the feature selector
+                        AttributeSelection selector = feature_selection.train_selector(
+                                evaluator, search_method, training_set
+                        );
+                        // Apply the selector to our training set
+                        Instances reduced_training_set = selector.reduceDimensionality(training_set);
 
                         // Get the attributes that have been selected so they can be applied to the test sets
                         int[] selected_attributes = selector.selectedAttributes();
 
-                        // Now attempt to train model and run tests if successful
-                        if (train_model(model_entry, reduced_training_set, training_set_entry.getKey())) {
-                            List<EvaluationResult> evaluations = run_tests(model_entry, datasets, training_set_entry.getKey(), selected_attributes);
-                            // Add metadata and combine results
-                            for (EvaluationResult result : evaluations) {
-                                result.set_evaluator(evaluator);
-                                result.set_search_method(search_method);
-                                result.set_threshold(threshold);
-                                master_eval_list.add(result);
-                            }
+                        // Run the relevant tests on our model
+                        List<EvaluationResult> model_evaluations = perform_model_cpdp_tests(
+                                model_entry, training_set_entry.getKey(), reduced_training_set,
+                                datasets, selected_attributes
+                        );
+
+                        master_eval_list.addAll(model_evaluations);
+
+                    } else { // Ranker search method require threshold values
+                        for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
+                            System.out.printf("Testing with threshold: %.2f%n", threshold);
+                            System.out.printf("Attributes: %d%n", training_set_entry.getValue().numAttributes());
+                            AttributeSelection selector = feature_selection.train_selector (
+                                    evaluator, search_method, training_set_entry.getValue(), threshold
+                            );
+                            Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
+
+                            // Get the attributes that have been selected so they can be applied to the test sets
+                            int[] selected_attributes = selector.selectedAttributes();
+
+                            List<EvaluationResult> model_evaluations = perform_model_cpdp_tests(
+                                    model_entry, training_set_entry.getKey(), reduced_training_set, datasets,
+                                    selected_attributes, evaluator, search_method, threshold
+                            );
+                            master_eval_list.addAll(model_evaluations);
                         }
                     }
                 }

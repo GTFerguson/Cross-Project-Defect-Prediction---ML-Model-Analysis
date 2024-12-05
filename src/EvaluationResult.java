@@ -40,6 +40,11 @@ class EvaluationResult {
                 (model_name, training_set_name, testing_set_name, evaluator, search_method, 0.0, evaluation);
     }
 
+    // Helper method to help ensure a safe value is returned from metric getters
+    private double safe_metric_value (Double value) {
+        return Double.isNaN(value) ? 0.0 : value;
+    }
+
     // GETTERS
     public String       get_model_name ()           { return model_name;        }
     public String       get_training_set_name ()    { return training_set_name; }
@@ -48,6 +53,20 @@ class EvaluationResult {
     public double       get_threshold ()            { return threshold;         }
     public String       get_testing_set_name ()     { return testing_set_name;  }
     public Evaluation   get_evaluation ()           { return evaluation;        }
+
+    // These getters get data from the Evaluation object
+    public double get_accuracy () {
+        // Divide by 100 to get as percentage
+        return safe_metric_value(evaluation.pctCorrect()/100);
+    }
+
+    public double get_recall () {
+        return safe_metric_value(evaluation.recall(1));
+    }
+
+    public double get_f_measure () {
+        return safe_metric_value(evaluation.fMeasure(1));
+    }
 
     // SETTERS
     public void set_model_name (String model_name)          { this.model_name           = model_name;       }

@@ -1,9 +1,6 @@
 import weka.classifiers.Evaluation;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.List;
 import java.util.Map;
 
@@ -34,17 +31,27 @@ public class EvaluationsDB {
         ) VALUES (?,?,?,?,?,?,?,?,?)
     """;
 
+    private static final String delete_evaluations_query = """
+            DELETE FROM evaluations;
+    """;
+
+    private static final String get_evaluation_summary = """
+        SELECT 
+            evaluator, search_method, model_name, threshold, COUNT(id) as test_count, 
+            AVG(accuracy) as avg_accuracy, AVG(recall) as avg_recall, AVG(f_measure) as avg_f_measure
+        FROM evaluations
+        GROUP BY evaluator, search_method, model_name, threshold;
+    """;
+
     public void connect () throws SQLException {
         if (conn == null || conn.isClosed()) {
             conn = DriverManager.getConnection(url);
-            System.out.println("Connected to database: " + db_name);
         }
     }
 
     public void disconnect() throws SQLException {
         if (conn != null && !conn.isClosed()) {
             conn.close();
-            System.out.println("Disconnected from database.");
         }
     }
 
@@ -76,19 +83,62 @@ public class EvaluationsDB {
 
     // Convenience method for easy insertion for map entries
     public void insert_evaluation (EvaluationResult evaluation) throws SQLException {
-        Evaluation eval = evaluation.get_evaluation();
-        System.out.println("Training Set: " + evaluation.get_training_set_name());
         insert_evaluation(
                 evaluation.get_model_name(), evaluation.get_evaluator(),
                 evaluation.get_search_method(), evaluation.get_threshold(),
                 evaluation.get_training_set_name(), evaluation.get_testing_set_name(),
-            eval.pctCorrect()/100, eval.recall(1), eval.fMeasure(1)
+                evaluation.get_accuracy(), evaluation.get_recall(), evaluation.get_f_measure()
         );
     }
 
+    // Allows insertion of a list of evaluations
     public void insert_evaluations (List<EvaluationResult> evaluations) throws SQLException {
         for (EvaluationResult evaluation : evaluations) {
             insert_evaluation(evaluation);
         }
+    }
+
+    public void delete_evaluations () throws SQLException {
+        connect();
+        var statement = conn.createStatement();
+        statement.execute(delete_evaluations_query);
+        disconnect();
+    }
+
+    public ResultSet get_evaluation_summary () throws SQLException {
+        connect();
+        var statement = conn.createStatement();
+        ResultSet results = statement.executeQuery(get_evaluation_summary);
+        disconnect();
+        return results;
+    }
+
+    public void print_evaluation_summary() throws SQLException {
+        connect();
+        var statement = conn.createStatement();
+        ResultSet results = statement.executeQuery(get_evaluation_summary);
+
+        // Print the header
+        System.out.printf(
+                "%-20s %-20s %-20s %-10s %-10s %-10s %-10s %-10s%n",
+                "Evaluator", "Search Method", "Model Name", "Threshold", "Tests", "Accuracy", "Recall", "F-Measure"
+        );
+        System.out.println("---------------------------------------------------------------------------------------------------------------------");
+
+        // Iterate through the results
+        while (results.next()) {
+            System.out.printf(
+                    "%-20s %-20s %-20s %-10.2f %-10d %-10.4f %-10.4f %-10.4f%n",
+                    results.getString("evaluator"),
+                    results.getString("search_method"),
+                    results.getString("model_name"),
+                    results.getDouble("threshold"),
+                    results.getInt("test_count"),
+                    results.getDouble("avg_accuracy"),
+                    results.getDouble("avg_recall"),
+                    results.getDouble("avg_f_measure")
+            );
+        }
+        disconnect();
     }
 }
