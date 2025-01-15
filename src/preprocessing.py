@@ -11,8 +11,9 @@ DATASETS_DIR = "src/datasets/promise"
 CORAL_DIR = os.path.join(DATASETS_DIR, "coral")
 MMD_DIR = os.path.join(DATASETS_DIR, "mmd")
 
-# Ensure the coral directory exists
+# Ensure the aligned dataset directories exists
 os.makedirs(CORAL_DIR, exist_ok=True)
+os.makedirs(MMD_DIR, exist_ok=True)
 
 
 def load_arff(filepath):
@@ -241,6 +242,16 @@ def process_datasets(datasets):
                 #save_arff(aligned_df, output_path)
 
                 output_path = os.path.join(MMD_DIR, f"{source_name[:-5]}-{target_name[:-5]}.arff")
+
+                # source_path = os.path.join(DATASETS_DIR, source_name)
+                # target_path = os.path.join(DATASETS_DIR, target_name)
+
+                # source_df = load_arff(source_path)
+                # target_df = load_arff(target_path)
+
+                #aligned_df = coral(source_df, target_df)
+                #output_path = os.path.join(CORAL_DIR, f"{source_name[:-5]}-{target_name[:-5]}.arff")
+
                 save_arff(aligned_df, output_path)
 
 
@@ -250,4 +261,8 @@ if __name__ == "__main__":
 
     # Process each source-target pair
     process_datasets(datasets)
+<<<<<<< HEAD
     print("Alignment complete. Files saved to:", MMD_DIR)
+=======
+    print("Alignment complete. Files saved to:", CORAL_DIR)
+>>>>>>> 1808f16409febb1f0c9d26bf36212ef4fd2fbd4e
