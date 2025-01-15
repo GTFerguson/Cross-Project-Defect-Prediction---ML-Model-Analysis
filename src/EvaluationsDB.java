@@ -1,5 +1,4 @@
 import weka.classifiers.Evaluation;
-
 import java.sql.*;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +14,7 @@ public class EvaluationsDB {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             evaluator TEXT,
             search_method TEXT,
+            da_type TEXT,
             threshold REAL,
             model_name TEXT NOT NULL,
             training_set TEXT NOT NULL,
@@ -27,8 +27,8 @@ public class EvaluationsDB {
 
     private static final String insert_evaluation_query = """
         INSERT INTO evaluations (
-            model_name, evaluator, search_method, threshold, training_set, testing_set, accuracy, recall, f_measure
-        ) VALUES (?,?,?,?,?,?,?,?,?)
+            model_name, evaluator, search_method, da_type, threshold, training_set, testing_set, accuracy, recall, f_measure
+        ) VALUES (?,?,?,?,?,?,?,?,?,?)
     """;
 
     private static final String delete_evaluations_query = """
@@ -43,6 +43,16 @@ public class EvaluationsDB {
         GROUP BY evaluator, search_method, model_name, threshold;
     """;
 
+    private static final String model_performance_ranking_query = """
+        SELECT 
+            model_name, evaluator, search_method, threshold, 
+            AVG(accuracy) as accuracy, AVG(recall) as recall, AVG(f_measure) as f_measure
+        FROM evaluations
+        GROUP BY evaluator, search_method, model_name, threshold
+        HAVING AVG(recall) >= 0.3
+        ORDER BY %s DESC
+        LIMIT 10;
+    """;
     public void connect () throws SQLException {
         if (conn == null || conn.isClosed()) {
             conn = DriverManager.getConnection(url);
@@ -113,6 +123,46 @@ public class EvaluationsDB {
         return results;
     }
 
+
+
+    public ResultSet get_top_performing_models (String metric) throws SQLException {
+        // Ensure the metric is one of the allowed columns to avoid SQL injection
+        if (!metric.equals("accuracy") && !metric.equals("recall") && !metric.equals("f_measure")) {
+            throw new IllegalArgumentException("Invalid metric: " + metric);
+        } else {
+            String query = String.format(model_performance_ranking_query, metric);
+
+            connect();
+            PreparedStatement prepStatement = conn.prepareStatement(query);
+            ResultSet results = prepStatement.executeQuery();
+            return results;
+        }
+    }
+
+    public void print_top_performing_models (String metric) throws SQLException {
+        ResultSet results = get_top_performing_models(metric);
+
+        // Print the header
+        System.out.printf(
+                "%n%-20s %-20s %-20s %-20s %-10s %-10s %-10s%n",
+                "Model Name", "Evaluator", "Search Method", "Threshold", "Accuracy", "Recall", "F-Measure"
+        );
+        System.out.println("--------------------------------------------------------------------------------------------------------------------");
+
+        while (results.next()) {
+            System.out.printf("%-20s %-20s %-20s %-20.2f %-10.4f %-10.4f %-10.4f%n",
+                    results.getString("model_name"),
+                    results.getString("evaluator"),
+                    results.getString("search_method"),
+                    results.getDouble("threshold"),
+                    results.getDouble("accuracy"),
+                    results.getDouble("recall"),
+                    results.getDouble("f_measure")
+            );
+        }
+        disconnect();
+    }
+
     public void print_evaluation_summary() throws SQLException {
         connect();
         var statement = conn.createStatement();
@@ -120,7 +170,7 @@ public class EvaluationsDB {
 
         // Print the header
         System.out.printf(
-                "%-20s %-20s %-20s %-10s %-10s %-10s %-10s %-10s%n",
+                "%n%-20s %-20s %-20s %-10s %-10s %-10s %-10s %-10s%n",
                 "Evaluator", "Search Method", "Model Name", "Threshold", "Tests", "Accuracy", "Recall", "F-Measure"
         );
         System.out.println("---------------------------------------------------------------------------------------------------------------------");

@@ -90,7 +90,9 @@ public class TestRunner {
             // Run test and store evaluation data
             try {
                 Evaluation eval = run_test(model_entry, testing_set_entry.getKey(), reduced_testing_set);
-                evaluations.add(EvaluationResult.create(model_entry.getKey(), training_set_name, testing_set_entry.getKey(), eval));
+                evaluations.add(
+                        EvaluationResult.create(model_entry.getKey(), training_set_name, testing_set_entry.getKey(), null, eval)
+                );
             } catch (Exception e) {
                 System.out.println("Test could not be performed.");
                 if (selected_attributes != null) {
@@ -244,6 +246,43 @@ public class TestRunner {
         return run_cpdp_test(model_handler, datasets, evaluator, search_method, threshold, threshold, 1.0);
     }
 
+    public List<EvaluationResult> run_aligned_cpdp_test (
+            ModelHandler model_handler, DatasetLoader datasetLoader, String da_type
+    ) throws Exception {
+
+        List<EvaluationResult> master_eval_list = new ArrayList<>();
+
+        // Iterate over the source datasets
+        for (String source_name : datasetLoader.get_coral_datasets().keySet()) {
+            Map<String, Instances> training_sets = datasetLoader.get_coral_dataset(source_name);
+
+            // Iterate over the models
+            for (Map.Entry<String, AbstractClassifier> model_entry : model_handler.get_model_map().entrySet()) {
+
+                // Iterate over the adjusted datasets for the source
+                for (Map.Entry<String, Instances> target_set : training_sets.entrySet()) {
+                    Instances adjustedTrainingSet = target_set.getValue();
+
+                    // Train and test the model
+                    if (train_model(model_entry, source_name, adjustedTrainingSet)) {
+                        List<EvaluationResult> evaluations = run_tests(
+                                model_entry,
+                                datasetLoader.get_datasets(),
+                                source_name,
+                                null
+                        );
+                        for (EvaluationResult eval_result : evaluations) {
+                            eval_result.set_da_type(da_type);
+                        }
+                        master_eval_list.addAll(evaluations);
+                    }
+                }
+            }
+        }
+
+        return master_eval_list;
+    }
+
     public String evaluation_results_to_string (List<EvaluationResult> evaluations) {
         StringBuilder output = new StringBuilder();
         // Print header for the table
@@ -257,7 +296,7 @@ public class TestRunner {
             Evaluation eval = evaluation.get_evaluation();
             // Print metrics in a table row
             output.append(String.format("%-25s %-20s %-20s %-10.4f %-10.4f %-10.4f\n",
-                    evaluation.get_training_set_name(), evaluation.get_training_set_name(),
+                    evaluation.get_model_name(), evaluation.get_training_set_name(),
                     evaluation.get_testing_set_name(),
                     eval.pctCorrect() / 100, eval.recall(1), eval.fMeasure(1))
             );

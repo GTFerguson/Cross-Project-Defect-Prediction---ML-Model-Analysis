@@ -1,12 +1,6 @@
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
-import weka.attributeSelection.AttributeSelection;
-import weka.classifiers.Evaluation;
-import weka.core.Instances;
 import weka.core.WekaPackageManager;
-
-import javax.xml.crypto.Data;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -103,12 +97,66 @@ public class Main {
         return thresholds;
     }
 
+    private static String[] coral_filepaths = {
+        "datasets/promise/coral/cm1-jm1.arff",
+        "datasets/promise/coral/cm1-kc1.arff",
+        "datasets/promise/coral/cm1-kc2.arff",
+        "datasets/promise/coral/cm1-pc1.arff",
+        "datasets/promise/coral/jm1-kc1.arff",
+        "datasets/promise/coral/jm1-kc2.arff",
+        "datasets/promise/coral/jm1-pc1.arff",
+        "datasets/promise/coral/kc1-jm1.arff",
+        "datasets/promise/coral/kc1-kc2.arff",
+        "datasets/promise/coral/kc1-pc1.arff",
+        "datasets/promise/coral/kc2-cm1.arff",
+        "datasets/promise/coral/kc2-jm1.arff",
+        "datasets/promise/coral/kc2-pc1.arff",
+        "datasets/promise/coral/pc1-cm1.arff",
+        "datasets/promise/coral/pc1-jm1.arff",
+        "datasets/promise/coral/pc1-kc1.arff"
+    };
+
+    private static String[] mmd_filepaths = {
+            "datasets/promise/mmd/cm1-jm1.arff",
+            "datasets/promise/mmd/cm1-kc1.arff",
+            "datasets/promise/mmd/cm1-kc2.arff",
+            "datasets/promise/mmd/cm1-pc1.arff",
+            "datasets/promise/mmd/jm1-kc1.arff",
+            "datasets/promise/mmd/jm1-kc2.arff",
+            "datasets/promise/mmd/jm1-pc1.arff",
+            "datasets/promise/mmd/kc1-jm1.arff",
+            "datasets/promise/mmd/kc1-kc2.arff",
+            "datasets/promise/mmd/kc1-pc1.arff",
+            "datasets/promise/mmd/kc2-cm1.arff",
+            "datasets/promise/mmd/kc2-jm1.arff",
+            "datasets/promise/mmd/kc2-pc1.arff",
+            "datasets/promise/mmd/pc1-cm1.arff",
+            "datasets/promise/mmd/pc1-jm1.arff",
+            "datasets/promise/mmd/pc1-kc1.arff"
+    };
+
+    public static void aligned_test (String[] filepaths, String da_type) throws Exception {
+        DatasetLoader loader = new DatasetLoader();
+        loader.load_aligned_datasets(filepaths);
+
+        TestRunner runner = new TestRunner();
+        ModelHandler handler = new ModelHandler();
+
+        List<EvaluationResult> results = runner.run_aligned_cpdp_test(handler, loader, da_type);
+        System.out.println(runner.evaluation_results_to_string(results));
+        System.out.println("\nTest Summarisations");
+        System.out.println(runner.summarise_results_per_training_set(results) + "\n");
+        System.out.println(runner.summarise_results(results));
+    }
+
     public static void test_menu (ModelHandler model_handler, DatasetLoader dataset_loader, EvaluationsDB eval_db)
             throws Exception {
         System.out.println("1: No Feature Selection");
         System.out.println("2: CFS");
         System.out.println("3: Info Gain");
         System.out.println("4: Gain Ratio");
+        System.out.println("5: CORAL");
+        System.out.println("6: MMD");
 
         Scanner scanner = new Scanner(System.in);
         int user_input = scanner.nextInt();
@@ -138,13 +186,20 @@ public class Main {
                         thresholds[0], thresholds[1], thresholds[2]
                 );
                 break;
+
+            case 5: // CORAL Tests
+                aligned_test(coral_filepaths, "Coral");
+                break;
+            case 6: // MMD Tests
+                aligned_test(mmd_filepaths, "MMD");
+                break;
             default:
                 break;
         }
         prompt_user_save_to_db(evaluations, eval_db);
     }
 
-    public static void main_menu (ModelHandler model_handler, DatasetLoader dataset_loader, EvaluationsDB eval_db) {
+    public static void main_menu (ModelHandler model_handler, DatasetLoader dataset_loader, EvaluationsDB eval_db) throws Exception {
         Scanner scanner = new Scanner(System.in);
 
         // First we must check if tests should be done with preprocessing
@@ -156,10 +211,11 @@ public class Main {
         boolean menu_active = true;
 
         while (menu_active) {
-            System.out.println("1: Test Menu");
+            System.out.println("\n1: Test Menu");
             System.out.println("2: Wipe Database");
             System.out.println("3: Summarise Evaluations");
-            System.out.println("4: Exit");
+            System.out.println("4: Top Performing Models");
+            System.out.println("5: Exit");
             int menu_input = scanner.nextInt();
 
             switch (menu_input) {
@@ -186,7 +242,31 @@ public class Main {
                         e.printStackTrace();
                     }
                     break;
-                case 4: // Exit
+                case 4:
+                    System.out.println("Choose metric to rank models by");
+                    System.out.println("1: Accuracy");
+                    System.out.println("2: Recall");
+                    System.out.println("3: F-Measure");
+                    int metric_input = scanner.nextInt();
+                    String metric = null;
+                    switch (metric_input) {
+                        case 1:
+                            metric = "accuracy";
+                            break;
+                        case 2:
+                            metric = "recall";
+                            break;
+                        case 3:
+                            metric = "f_measure";
+                            break;
+                    }
+                    try {
+                        eval_db.print_top_performing_models(metric);
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                    break;
+                case 5: // Quit
                     menu_active = false;
                     break;
                 default:
@@ -210,6 +290,10 @@ public class Main {
             e.printStackTrace();
         }
 
-        main_menu(model_handler, dataset_loader, eval_db);
+        try {
+            main_menu(model_handler, dataset_loader, eval_db);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
