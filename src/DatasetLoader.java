@@ -78,12 +78,12 @@ public class DatasetLoader {
         return datasets.get(dataset_name);
     }
 
-    public Map<String, Instances> get_coral_dataset (String dataset_name) {
+    public Map<String, Instances> get_aligned_dataset(String dataset_name) {
         return coral_datasets.get(dataset_name);
     }
 
     public HashMap<String, Instances> get_datasets() { return datasets; }
-    public HashMap<String, Map<String, Instances>> get_coral_datasets() { return coral_datasets; }
+    public HashMap<String, Map<String, Instances>> get_aligned_datasets() { return coral_datasets; }
 
     // Preprocess a single dataset (apply ReplaceMissingValues filter)
     private Instances preprocess(Instances data) {

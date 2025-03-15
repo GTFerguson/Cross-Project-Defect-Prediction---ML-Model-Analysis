@@ -1,0 +1,15 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+src/datasets/
+src/datasets.promise
+.idea/
+venv/
+out
+*.db
+*.db-journal
+*.iml
+sqlite-jdbc-3.47.0.0.jar
+summarise_eval_query.sql
+CPDP-ML.zip
+Results Summary.pdf

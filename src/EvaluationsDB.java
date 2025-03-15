@@ -27,7 +27,7 @@ public class EvaluationsDB {
 
     private static final String insert_evaluation_query = """
         INSERT INTO evaluations (
-            model_name, evaluator, search_method, da_type, threshold, training_set, testing_set, accuracy, recall, f_measure
+            model_name, da_type, evaluator, search_method, threshold, training_set, testing_set, accuracy, recall, f_measure
         ) VALUES (?,?,?,?,?,?,?,?,?,?)
     """;
 
@@ -37,18 +37,18 @@ public class EvaluationsDB {
 
     private static final String get_evaluation_summary = """
         SELECT 
-            evaluator, search_method, model_name, threshold, COUNT(id) as test_count, 
+            da_type, evaluator, search_method, model_name, threshold, COUNT(id) as test_count, 
             AVG(accuracy) as avg_accuracy, AVG(recall) as avg_recall, AVG(f_measure) as avg_f_measure
         FROM evaluations
-        GROUP BY evaluator, search_method, model_name, threshold;
+        GROUP BY da_type, evaluator, search_method, model_name, threshold;
     """;
 
     private static final String model_performance_ranking_query = """
         SELECT 
-            model_name, evaluator, search_method, threshold, 
+            model_name, da_type, evaluator, search_method, threshold, 
             AVG(accuracy) as accuracy, AVG(recall) as recall, AVG(f_measure) as f_measure
         FROM evaluations
-        GROUP BY evaluator, search_method, model_name, threshold
+        GROUP BY da_type, evaluator, search_method, model_name, threshold
         HAVING AVG(recall) >= 0.3
         ORDER BY %s DESC
         LIMIT 10;
@@ -73,20 +73,23 @@ public class EvaluationsDB {
     }
 
     public void insert_evaluation (
-            String model_name, String evaluator, String search_method, Double threshold,
+            String model_name, String da_type,
+            String evaluator, String search_method, Double threshold,
             String training_set_name, String testing_set_name,
             Double accuracy, Double recall, Double f_measure) throws SQLException {
+
         connect();
         PreparedStatement prep_statement = conn.prepareStatement(insert_evaluation_query);
         prep_statement.setString(1, model_name);
-        prep_statement.setString(2, evaluator);
-        prep_statement.setString(3, search_method);
-        prep_statement.setDouble(4, threshold);
-        prep_statement.setString(5, training_set_name);
-        prep_statement.setString(6, testing_set_name);
-        prep_statement.setDouble(7, accuracy);
-        prep_statement.setDouble(8, recall);
-        prep_statement.setDouble(9, f_measure);
+        prep_statement.setString(2, da_type);
+        prep_statement.setString(3, evaluator);
+        prep_statement.setString(4, search_method);
+        prep_statement.setDouble(5, threshold);
+        prep_statement.setString(6, training_set_name);
+        prep_statement.setString(7, testing_set_name);
+        prep_statement.setDouble(8, accuracy);
+        prep_statement.setDouble(9, recall);
+        prep_statement.setDouble(10, f_measure);
         prep_statement.executeUpdate();
         disconnect();
     }
@@ -94,8 +97,8 @@ public class EvaluationsDB {
     // Convenience method for easy insertion for map entries
     public void insert_evaluation (EvaluationResult evaluation) throws SQLException {
         insert_evaluation(
-                evaluation.get_model_name(), evaluation.get_evaluator(),
-                evaluation.get_search_method(), evaluation.get_threshold(),
+                evaluation.get_model_name(), evaluation.get_da_type(),
+                evaluation.get_evaluator(), evaluation.get_search_method(), evaluation.get_threshold(),
                 evaluation.get_training_set_name(), evaluation.get_testing_set_name(),
                 evaluation.get_accuracy(), evaluation.get_recall(), evaluation.get_f_measure()
         );
@@ -144,14 +147,15 @@ public class EvaluationsDB {
 
         // Print the header
         System.out.printf(
-                "%n%-20s %-20s %-20s %-20s %-10s %-10s %-10s%n",
-                "Model Name", "Evaluator", "Search Method", "Threshold", "Accuracy", "Recall", "F-Measure"
+                "%n%-20s %-20s %-20s %-20s %-10s %-10s %-10s %-10s %-10s%n",
+                "Model Name", "DA Type", "Evaluator", "Search Method", "Threshold", "Tests", "Accuracy", "Recall", "F-Measure"
         );
-        System.out.println("--------------------------------------------------------------------------------------------------------------------");
+        System.out.println("-----------------------------------------------------------------------------------------------------------------------------------------");
 
         while (results.next()) {
-            System.out.printf("%-20s %-20s %-20s %-20.2f %-10.4f %-10.4f %-10.4f%n",
+            System.out.printf("%-20s %-20s %-20s %-20s %-20.2f %-10.4f %-10.4f %-10.4f%n",
                     results.getString("model_name"),
+                    results.getString("da_type"),
                     results.getString("evaluator"),
                     results.getString("search_method"),
                     results.getDouble("threshold"),
@@ -170,15 +174,16 @@ public class EvaluationsDB {
 
         // Print the header
         System.out.printf(
-                "%n%-20s %-20s %-20s %-10s %-10s %-10s %-10s %-10s%n",
-                "Evaluator", "Search Method", "Model Name", "Threshold", "Tests", "Accuracy", "Recall", "F-Measure"
+                "%n%-20s %-20s %-20s %-20s %-10s %-10s %-10s %-10s %-10s%n",
+                "DA Type", "Evaluator", "Search Method", "Model Name", "Threshold", "Tests", "Accuracy", "Recall", "F-Measure"
         );
-        System.out.println("---------------------------------------------------------------------------------------------------------------------");
+        System.out.println("-----------------------------------------------------------------------------------------------------------------------------------------");
 
         // Iterate through the results
         while (results.next()) {
             System.out.printf(
-                    "%-20s %-20s %-20s %-10.2f %-10d %-10.4f %-10.4f %-10.4f%n",
+                    "%-20s %-20s %-20s %-20s %-10.2f %-10d %-10.4f %-10.4f %-10.4f%n",
+                    results.getString("da_type"),
                     results.getString("evaluator"),
                     results.getString("search_method"),
                     results.getString("model_name"),

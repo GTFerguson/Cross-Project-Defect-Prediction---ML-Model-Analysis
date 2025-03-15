@@ -1,5 +1,4 @@
 import weka.attributeSelection.AttributeSelection;
-import weka.attributeSelection.Ranker;
 import weka.classifiers.AbstractClassifier;
 import weka.classifiers.Evaluation;
 import weka.core.Instances;
@@ -125,7 +124,7 @@ public class TestRunner {
                 for (EvaluationResult result : evaluations) {
                     result.set_evaluator(evaluator);
                     result.set_search_method(search_method);
-                    System.out.printf("Setting evalulation to %s and search method to %s!!%n", evaluator, search_method);
+                    System.out.printf("Setting evaluation to %s and search method to %s!!%n", evaluator, search_method);
                     if (threshold != null) result.set_threshold(threshold);
                 }
             }
@@ -157,11 +156,66 @@ public class TestRunner {
         );
     }
 
-    // Overloaded version to allow for feature selection
-    public List<EvaluationResult> run_cpdp_test (
-            ModelHandler model_handler, Map<String, Instances> datasets,
+
+    private List<EvaluationResult> feature_selection_test (
+            Map.Entry<String, AbstractClassifier> model_entry,
+            Map<String, Instances> datasets,
+            Map.Entry<String, Instances> training_set_entry,
+            FeatureSelection feature_selection,
             String evaluator, String search_method,
             Double start_threshold, Double end_threshold, Double step) throws Exception {
+
+        List<EvaluationResult> model_evaluations = null;
+
+
+        if (!search_method.equals("Ranker")) {
+            // Create a deep copy of the training set to avoid modifying the original
+            Instances training_set = new Instances(training_set_entry.getValue());
+
+            // Build the feature selector
+            AttributeSelection selector = feature_selection.train_selector(
+                    evaluator, search_method, training_set
+            );
+            // Apply the selector to our training set
+            Instances reduced_training_set = selector.reduceDimensionality(training_set);
+
+            // Get the attributes that have been selected so they can be applied to the test sets
+            int[] selected_attributes = selector.selectedAttributes();
+
+            // Run the relevant tests on our model
+            model_evaluations = perform_model_cpdp_tests(
+                    model_entry, training_set_entry.getKey(), reduced_training_set,
+                    datasets, selected_attributes, evaluator, search_method
+            );
+
+        } else {
+            // Ranker search method require threshold values
+            for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
+                System.out.printf("Testing with threshold: %.2f%n", threshold);
+                AttributeSelection selector = feature_selection.train_selector (
+                        evaluator, search_method, training_set_entry.getValue(), threshold
+                );
+                Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
+
+                // Get the attributes that have been selected so they can be applied to the test sets
+                int[] selected_attributes = selector.selectedAttributes();
+
+                model_evaluations = perform_model_cpdp_tests(
+                        model_entry, training_set_entry.getKey(), reduced_training_set, datasets,
+                        selected_attributes, evaluator, search_method, threshold
+                );
+            }
+        }
+
+        return model_evaluations;
+    }
+
+    // Overloaded version to allow for feature selection
+        public List<EvaluationResult> run_cpdp_test (
+                ModelHandler model_handler, Map<String, Instances> datasets,
+                String evaluator, String search_method,
+                Double start_threshold, Double end_threshold, Double step) throws Exception {
+
         FeatureSelection feature_selection = new FeatureSelection();
         List<EvaluationResult> master_eval_list = new ArrayList<>();
 
@@ -182,47 +236,13 @@ public class TestRunner {
 
                 // Feature Selection
                 } else {
-                    // For non-ranker search methods, such as the kind used by CFS
-                    if (!search_method.equals("Ranker")) {
-                        // Create a deep copy of the training set to avoid modifying the original
-                        Instances training_set = new Instances(training_set_entry.getValue());
-
-                        // Build the feature selector
-                        AttributeSelection selector = feature_selection.train_selector(
-                                evaluator, search_method, training_set
-                        );
-                        // Apply the selector to our training set
-                        Instances reduced_training_set = selector.reduceDimensionality(training_set);
-
-                        // Get the attributes that have been selected so they can be applied to the test sets
-                        int[] selected_attributes = selector.selectedAttributes();
-
-                        // Run the relevant tests on our model
-                        List<EvaluationResult> model_evaluations = perform_model_cpdp_tests(
-                                model_entry, training_set_entry.getKey(), reduced_training_set,
-                                datasets, selected_attributes, evaluator, search_method
-                        );
-
-                        master_eval_list.addAll(model_evaluations);
-
-                    } else { // Ranker search method require threshold values
-                        for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
-                            System.out.printf("Testing with threshold: %.2f%n", threshold);
-                            AttributeSelection selector = feature_selection.train_selector (
-                                    evaluator, search_method, training_set_entry.getValue(), threshold
-                            );
-                            Instances reduced_training_set = selector.reduceDimensionality(training_set_entry.getValue());
-
-                            // Get the attributes that have been selected so they can be applied to the test sets
-                            int[] selected_attributes = selector.selectedAttributes();
-
-                            List<EvaluationResult> model_evaluations = perform_model_cpdp_tests(
-                                    model_entry, training_set_entry.getKey(), reduced_training_set, datasets,
-                                    selected_attributes, evaluator, search_method, threshold
-                            );
-                            master_eval_list.addAll(model_evaluations);
-                        }
-                    }
+                    master_eval_list.addAll(
+                            feature_selection_test(
+                                    model_entry, datasets, training_set_entry,
+                                    feature_selection, evaluator, search_method,
+                                    start_threshold, end_threshold, step
+                            )
+                    );
                 }
             }
         }
@@ -247,40 +267,111 @@ public class TestRunner {
     }
 
     public List<EvaluationResult> run_aligned_cpdp_test (
-            ModelHandler model_handler, DatasetLoader datasetLoader, String da_type
-    ) throws Exception {
+            ModelHandler model_handler, DatasetLoader dataset_loader,
+            String da_type, String evaluator, String search_method,
+            Double start_threshold, Double end_threshold, Double step) throws Exception {
 
         List<EvaluationResult> master_eval_list = new ArrayList<>();
+        FeatureSelection feature_selection = new FeatureSelection();
 
         // Iterate over the source datasets
-        for (String source_name : datasetLoader.get_coral_datasets().keySet()) {
-            Map<String, Instances> training_sets = datasetLoader.get_coral_dataset(source_name);
+        for (String source_name : dataset_loader.get_aligned_datasets().keySet()) {
+            Map<String, Instances> training_sets = dataset_loader.get_aligned_dataset(source_name);
 
             // Iterate over the models
             for (Map.Entry<String, AbstractClassifier> model_entry : model_handler.get_model_map().entrySet()) {
 
                 // Iterate over the adjusted datasets for the source
                 for (Map.Entry<String, Instances> target_set : training_sets.entrySet()) {
-                    Instances adjustedTrainingSet = target_set.getValue();
+                    Instances adjusted_training_set = target_set.getValue();
 
-                    // Train and test the model
-                    if (train_model(model_entry, source_name, adjustedTrainingSet)) {
-                        List<EvaluationResult> evaluations = run_tests(
-                                model_entry,
-                                datasetLoader.get_datasets(),
-                                source_name,
-                                null
-                        );
-                        for (EvaluationResult eval_result : evaluations) {
-                            eval_result.set_da_type(da_type);
+                    // Train and test the model WITHOUT Feature Selection
+                    if (evaluator == null && search_method == null) {
+                        if (train_model(model_entry, source_name, adjusted_training_set)) {
+                            List<EvaluationResult> evaluations = run_tests(
+                                    model_entry,
+                                    dataset_loader.get_datasets(),
+                                    source_name,
+                                    null
+                            );
+                            for (EvaluationResult eval_result : evaluations) {
+                                eval_result.set_da_type(da_type);
+                            }
+                            master_eval_list.addAll(evaluations);
                         }
-                        master_eval_list.addAll(evaluations);
+
+                    // With Feature Selection
+                    } else if (!search_method.equals("Ranker")) {
+                        // Non-Ranker case
+                        Instances training_set_copy = new Instances(adjusted_training_set);
+
+                        // Apply feature selection
+                        AttributeSelection selector = feature_selection.train_selector(
+                                evaluator, search_method, training_set_copy);
+                        Instances reduced_training_set = selector.reduceDimensionality(training_set_copy);
+                        int[] selected_attributes = selector.selectedAttributes();
+
+                        // Train and test with reduced features
+                        if (train_model(model_entry, source_name, reduced_training_set)) {
+                            List<EvaluationResult> evaluations = run_tests(
+                                    model_entry, dataset_loader.get_datasets(), source_name, selected_attributes);
+                            for (EvaluationResult eval_result : evaluations) {
+                                eval_result.set_da_type(da_type);
+                                eval_result.set_evaluator(evaluator);
+                                eval_result.set_search_method(search_method);
+                            }
+                            master_eval_list.addAll(evaluations);
+                        }
+
+                    } else {
+                        // Ranker case with threshold
+                        for (Double threshold = start_threshold; threshold <= end_threshold; threshold += step) {
+                            System.out.printf("Testing with threshold: %.2f%n", threshold);
+
+                            AttributeSelection selector = feature_selection.train_selector(
+                                    evaluator, search_method, adjusted_training_set, threshold);
+                            Instances reduced_training_set = selector.reduceDimensionality(adjusted_training_set);
+                            int[] selected_attributes = selector.selectedAttributes();
+
+                            // Train and test with reduced features
+                            if (train_model(model_entry, source_name, reduced_training_set)) {
+                                List<EvaluationResult> evaluations = run_tests(
+                                        model_entry, dataset_loader.get_datasets(), source_name, selected_attributes);
+                                for (EvaluationResult eval_result : evaluations) {
+                                    eval_result.set_da_type(da_type);
+                                    eval_result.set_evaluator(evaluator);
+                                    eval_result.set_search_method(search_method);
+                                    eval_result.set_threshold(threshold);
+                                    System.out.printf("DA Type: %s", eval_result.get_da_type());
+                                }
+                                master_eval_list.addAll(evaluations);
+                            }
+                        }
                     }
                 }
             }
         }
 
         return master_eval_list;
+    }
+
+    public List<EvaluationResult> run_aligned_cpdp_test (
+            ModelHandler model_handler, DatasetLoader dataset_loader, String da_type) throws Exception {
+
+        return run_aligned_cpdp_test(
+                model_handler, dataset_loader, da_type,
+                null, null, null, null, null
+        );
+    }
+
+    public List<EvaluationResult> run_aligned_cpdp_test (
+            ModelHandler model_handler, DatasetLoader dataset_loader,
+            String da_type, String evaluator, String search_method) throws Exception {
+
+        return run_aligned_cpdp_test(
+                model_handler, dataset_loader, da_type,
+                evaluator, search_method, null, null, null
+        );
     }
 
     public String evaluation_results_to_string (List<EvaluationResult> evaluations) {

@@ -9,6 +9,44 @@ import java.util.Scanner;
 
 public class Main {
 
+    private static String[] coral_filepaths = {
+            "datasets/promise/coral/cm1-jm1.arff",
+            "datasets/promise/coral/cm1-kc1.arff",
+            "datasets/promise/coral/cm1-kc2.arff",
+            "datasets/promise/coral/cm1-pc1.arff",
+            "datasets/promise/coral/jm1-kc1.arff",
+            "datasets/promise/coral/jm1-kc2.arff",
+            "datasets/promise/coral/jm1-pc1.arff",
+            "datasets/promise/coral/kc1-jm1.arff",
+            "datasets/promise/coral/kc1-kc2.arff",
+            "datasets/promise/coral/kc1-pc1.arff",
+            "datasets/promise/coral/kc2-cm1.arff",
+            "datasets/promise/coral/kc2-jm1.arff",
+            "datasets/promise/coral/kc2-pc1.arff",
+            "datasets/promise/coral/pc1-cm1.arff",
+            "datasets/promise/coral/pc1-jm1.arff",
+            "datasets/promise/coral/pc1-kc1.arff"
+    };
+
+    private static String[] mmd_filepaths = {
+            "datasets/promise/mmd/cm1-jm1.arff",
+            "datasets/promise/mmd/cm1-kc1.arff",
+            "datasets/promise/mmd/cm1-kc2.arff",
+            "datasets/promise/mmd/cm1-pc1.arff",
+            "datasets/promise/mmd/jm1-kc1.arff",
+            "datasets/promise/mmd/jm1-kc2.arff",
+            "datasets/promise/mmd/jm1-pc1.arff",
+            "datasets/promise/mmd/kc1-jm1.arff",
+            "datasets/promise/mmd/kc1-kc2.arff",
+            "datasets/promise/mmd/kc1-pc1.arff",
+            "datasets/promise/mmd/kc2-cm1.arff",
+            "datasets/promise/mmd/kc2-jm1.arff",
+            "datasets/promise/mmd/kc2-pc1.arff",
+            "datasets/promise/mmd/pc1-cm1.arff",
+            "datasets/promise/mmd/pc1-jm1.arff",
+            "datasets/promise/mmd/pc1-kc1.arff"
+    };
+
     // Simple test without feature selection
     public static List<EvaluationResult> run_tests (ModelHandler model_handler, DatasetLoader dataset_loader)
             throws Exception {
@@ -72,10 +110,11 @@ public class Main {
                 try {
                     List<EvaluationResult> evaluations;
                     if (search_method_entry.getKey().equals("Ranker")) {
-                        evaluations = run_tests(model_handler, dataset_loader, evaluator_entry.getKey(), search_method_entry.getKey(), 0.01, 0.1, 0.01);
+                        evaluations = run_tests(model_handler, dataset_loader, evaluator_entry.getKey(), search_method_entry.getKey(), 0.02, 0.1, 0.01);
                     } else {
                         evaluations = run_tests(model_handler, dataset_loader, evaluator_entry.getKey(), search_method_entry.getKey(), null, null, null);
                     }
+
                     prompt_user_save_to_db(evaluations, eval_db);
                 } catch (Exception e) {
                     System.out.println("Could not run test using " + fs_details);
@@ -97,56 +136,57 @@ public class Main {
         return thresholds;
     }
 
-    private static String[] coral_filepaths = {
-        "datasets/promise/coral/cm1-jm1.arff",
-        "datasets/promise/coral/cm1-kc1.arff",
-        "datasets/promise/coral/cm1-kc2.arff",
-        "datasets/promise/coral/cm1-pc1.arff",
-        "datasets/promise/coral/jm1-kc1.arff",
-        "datasets/promise/coral/jm1-kc2.arff",
-        "datasets/promise/coral/jm1-pc1.arff",
-        "datasets/promise/coral/kc1-jm1.arff",
-        "datasets/promise/coral/kc1-kc2.arff",
-        "datasets/promise/coral/kc1-pc1.arff",
-        "datasets/promise/coral/kc2-cm1.arff",
-        "datasets/promise/coral/kc2-jm1.arff",
-        "datasets/promise/coral/kc2-pc1.arff",
-        "datasets/promise/coral/pc1-cm1.arff",
-        "datasets/promise/coral/pc1-jm1.arff",
-        "datasets/promise/coral/pc1-kc1.arff"
-    };
 
-    private static String[] mmd_filepaths = {
-            "datasets/promise/mmd/cm1-jm1.arff",
-            "datasets/promise/mmd/cm1-kc1.arff",
-            "datasets/promise/mmd/cm1-kc2.arff",
-            "datasets/promise/mmd/cm1-pc1.arff",
-            "datasets/promise/mmd/jm1-kc1.arff",
-            "datasets/promise/mmd/jm1-kc2.arff",
-            "datasets/promise/mmd/jm1-pc1.arff",
-            "datasets/promise/mmd/kc1-jm1.arff",
-            "datasets/promise/mmd/kc1-kc2.arff",
-            "datasets/promise/mmd/kc1-pc1.arff",
-            "datasets/promise/mmd/kc2-cm1.arff",
-            "datasets/promise/mmd/kc2-jm1.arff",
-            "datasets/promise/mmd/kc2-pc1.arff",
-            "datasets/promise/mmd/pc1-cm1.arff",
-            "datasets/promise/mmd/pc1-jm1.arff",
-            "datasets/promise/mmd/pc1-kc1.arff"
-    };
-
-    public static void aligned_test (String[] filepaths, String da_type) throws Exception {
-        DatasetLoader loader = new DatasetLoader();
-        loader.load_aligned_datasets(filepaths);
+    public static void aligned_test (String[] filepaths, String da_type, EvaluationsDB eval_db) throws Exception {
+        DatasetLoader dataset_loader = new DatasetLoader();
+        dataset_loader.load_aligned_datasets(filepaths);
 
         TestRunner runner = new TestRunner();
-        ModelHandler handler = new ModelHandler();
+        ModelHandler model_handler = new ModelHandler();
 
-        List<EvaluationResult> results = runner.run_aligned_cpdp_test(handler, loader, da_type);
+        System.out.printf("%n%s aligned tests beginning!%n", da_type);
+
+        // No feature selection
+        List<EvaluationResult> results = runner.run_aligned_cpdp_test(model_handler, dataset_loader, da_type);
         System.out.println(runner.evaluation_results_to_string(results));
         System.out.println("\nTest Summarisations");
         System.out.println(runner.summarise_results_per_training_set(results) + "\n");
         System.out.println(runner.summarise_results(results));
+        System.out.println("Saving results!");
+        eval_db.insert_evaluations(results);
+
+        // Feature selection
+        FeatureSelection feature_selection = new FeatureSelection();
+        for (Map.Entry<String, ASEvaluation> evaluator_entry : feature_selection.get_evaluators().entrySet()) {
+            for (Map.Entry<String, ASSearch> search_method_entry : feature_selection.get_search_methods().entrySet()) {
+                String fs_details = "Evaluator: " + evaluator_entry.getKey() + " Search Method: " + search_method_entry.getKey();
+                List<EvaluationResult> evaluations = null;
+                try {
+                    if (search_method_entry.getKey().equals("Ranker")) {
+                        evaluations = runner.run_aligned_cpdp_test(
+                                model_handler, dataset_loader, da_type,
+                                evaluator_entry.getKey(), search_method_entry.getKey(),
+                                0.02, 0.1, 0.01
+                        );
+                    } else {
+                        evaluations = runner.run_aligned_cpdp_test(
+                                model_handler, dataset_loader, da_type,
+                                evaluator_entry.getKey(), search_method_entry.getKey()
+                        );
+                    }
+
+                    //prompt_user_save_to_db(evaluations, eval_db);
+                } catch (Exception e) {
+                    System.out.println("Could not run test using " + fs_details);
+                    e.printStackTrace();
+                }
+
+                if(!evaluations.isEmpty()) {
+                    System.out.println("Saving results!");
+                    eval_db.insert_evaluations(evaluations);
+                }
+            }
+        }
     }
 
     public static void test_menu (ModelHandler model_handler, DatasetLoader dataset_loader, EvaluationsDB eval_db)
@@ -188,10 +228,10 @@ public class Main {
                 break;
 
             case 5: // CORAL Tests
-                aligned_test(coral_filepaths, "Coral");
+                aligned_test(coral_filepaths, "Coral", eval_db);
                 break;
             case 6: // MMD Tests
-                aligned_test(mmd_filepaths, "MMD");
+                aligned_test(mmd_filepaths, "MMD", eval_db);
                 break;
             default:
                 break;
@@ -206,7 +246,6 @@ public class Main {
         System.out.println("Preprocess missing values? (Y/N)");
         String user_input = scanner.nextLine().trim().toLowerCase();
         if (user_input.equals("y")) dataset_loader.preprocess_datasets();
-
 
         boolean menu_active = true;
 
@@ -289,6 +328,16 @@ public class Main {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
+//        try {
+//            // First we must check if tests should be done with preprocessing
+//            dataset_loader.preprocess_datasets();
+//
+//            aligned_test(coral_filepaths, "Coral", eval_db);
+//            aligned_test(mmd_filepaths, "MMD", eval_db);
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
 
         try {
             main_menu(model_handler, dataset_loader, eval_db);
