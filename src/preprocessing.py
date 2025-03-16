@@ -18,6 +18,9 @@ os.makedirs(CORAL_DIR, exist_ok=True)
 os.makedirs(MMD_DIR, exist_ok=True)
 
 
+#################################
+#       File Handling           #
+#################################
 def load_arff(filepath):
     """Loads an ARFF file and returns a Pandas DataFrame."""
     data, meta = arff.loadarff(filepath)
@@ -45,24 +48,85 @@ def save_arff(dataframe, filepath):
         dataframe.to_csv(f, index=False, header=False)
 
 
-def validate_data(dataframe, dataset_name):
-    """Validate dataset and handle missing or invalid values."""
-    print(f"Validating {dataset_name}...")
+#################################
+#   Data Validation/Cleaning    #
+#################################
+def handle_missing_values(dataset):
+    """
+    Handles missing values in a mixed-type dataset (both numeric and non-numeric).
+    """
+    # Check if dataset is a numpy array; if so, assume numeric
+    if isinstance(dataset, np.ndarray):
+        nan_count = np.isnan(dataset).sum()
+        print(f"Handling {nan_count} NaN values in the numeric dataset...")
+        col_means = np.nanmean(dataset, axis=0)
+        inds = np.where(np.isnan(dataset))
+        dataset[inds] = np.take(col_means, inds[1])
+        return dataset
 
-    # Identify numeric columns
-    numeric_columns = dataframe.select_dtypes(include=['number']).columns
+    # If dataset is a pandas DataFrame
+    elif isinstance(dataset, pd.DataFrame):
+        print("Handling NaN values in DataFrame...")
 
-    # Fill missing values only for numeric columns with column means
-    dataframe[numeric_columns] = dataframe[numeric_columns].fillna(dataframe[numeric_columns].mean())
+        # Handle numeric columns
+        numeric_columns = dataset.select_dtypes(include=['number']).columns
+        dataset[numeric_columns] = dataset[numeric_columns].fillna(dataset[numeric_columns].mean())
 
-    # Handle non-numeric columns separately (e.g., categorical, boolean)
-    non_numeric_columns = dataframe.select_dtypes(exclude=['number']).columns
-    for col in non_numeric_columns:
-        dataframe[col] = dataframe[col].fillna(dataframe[col].mode()[0])  # Use mode for non-numeric columns
+        # Handle non-numeric columns
+        non_numeric_columns = dataset.select_dtypes(exclude=['number']).columns
+        for col in non_numeric_columns:
+            dataset[col] = dataset[col].fillna(dataset[col].mode()[0])  # Replace with mode (most common value)
 
-    return dataframe
+        return dataset
+
+    else:
+        raise TypeError("Dataset must be a numpy array or pandas DataFrame.")
 
 
+def standardize_data(source_df, target_df):
+    """
+    Standardizes the numeric columns of source and target DataFrames using a StandardScaler
+    fitted on the combined data of only the common numeric columns.
+
+    Parameters:
+    - source_df: pandas DataFrame for the source dataset.
+    - target_df: pandas DataFrame for the target dataset.
+
+    Returns:
+    - source_df, target_df: DataFrames with the common numeric columns standardized.
+    """
+    # Get numeric columns from each DataFrame
+    source_numeric = source_df.select_dtypes(include=['number']).columns
+    target_numeric = target_df.select_dtypes(include=['number']).columns
+
+    # Find the common numeric columns between source and target
+    common_numeric = source_numeric.intersection(target_numeric)
+
+    if len(common_numeric) == 0:
+        print("No common numeric columns found for standardization.")
+        return source_df, target_df
+
+    # Combine the numeric columns from both datasets
+    combined = pd.concat([source_df[common_numeric], target_df[common_numeric]])
+
+    scaler = StandardScaler()
+    scaler.fit(combined)
+
+    # Transform only the common numeric columns
+    source_df[common_numeric] = scaler.transform(source_df[common_numeric])
+    target_df[common_numeric] = scaler.transform(target_df[common_numeric])
+
+    return source_df, target_df
+
+
+def clean_columns(df):
+    df.columns = df.columns.str.strip().str.lower()
+    return df
+
+
+#################################
+#   (COR)relation (AL)ignment   #
+#################################
 def coral(source_df, target_df):
     """
     Implements the CORAL algorithm to align the source dataset
@@ -70,8 +134,8 @@ def coral(source_df, target_df):
     """
 
     # Validate datasets
-    source_df = validate_data(source_df, "Source Dataset")
-    target_df = validate_data(target_df, "Target Dataset")
+    source_df = handle_missing_values(source_df)
+    target_df = handle_missing_values(target_df)
 
     source_data = source_df.iloc[:, :-1].to_numpy()  # Exclude target column
     target_data = target_df.iloc[:, :-1].to_numpy()  # Exclude target column
@@ -94,7 +158,9 @@ def coral(source_df, target_df):
     return aligned_df
 
 
-# MMD
+#################################
+#   Maximum Mean Deficiency     #
+#################################
 def rbf_kernel(x, y, sigma=1.0):
     """
     Compute the RBF (Gaussian) kernel matrix between two datasets.
@@ -181,25 +247,56 @@ def compute_grad(X_s, X_t, kernel, sigma):
     """
     n = X_s.shape[0]
     m = X_t.shape[0]
-    grad = np.zeros_like(X_s)
 
     # Compute kernel matrices for source-source and source-target
     K_ss = kernel(X_s, X_s, sigma)  # shape: (n, n)
     K_st = kernel(X_s, X_t, sigma)  # shape: (n, m)
 
+    grad = np.zeros_like(X_s)
     for i in range(n):
-        # Source-to-source term: note the negative sign
         term_ss = np.sum(K_ss[i][:, None] * (X_s[i] - X_s), axis=0)
-        # Source-to-target term: positive contribution
         term_st = np.sum(K_st[i][:, None] * (X_s[i] - X_t), axis=0)
-
         grad[i] = - (2 / (n * sigma**2)) * term_ss + (2 / (m * sigma**2)) * term_st
-
     return grad
+
+def compute_grad_vectorized(X_s, X_t, kernel, sigma):
+    """
+    Computes the gradient of the MMD with respect to the source data.
+
+    For each source sample x_i:
+      grad_i = - (2/(n * sigma**2)) * sum_j k(x_i, x_j) (x_i - x_j)
+               + (2/(m * sigma**2)) * sum_j k(x_i, y_j) (x_i - y_j)
+
+    Parameters:
+    - X_s: np.ndarray, source data of shape (n, d)
+    - X_t: np.ndarray, target data of shape (m, d)
+    - kernel: callable, kernel function accepting (X_s, X, sigma)
+    - sigma: float, RBF kernel bandwidth
+
+    Returns:
+    - grad: np.ndarray, gradient with same shape as X_s
+    """
+    n = X_s.shape[0]
+    m = X_t.shape[0]
+
+    # Compute kernel matrices for source-source and source-target
+    K_ss = kernel(X_s, X_s, sigma)  # shape: (n, n)
+    K_st = kernel(X_s, X_t, sigma)  # shape: (n, m)
+
+    try:
+        # Vectorized computation of gradient
+        term_ss = (K_ss[:, :, None] * (X_s[:, None, :] - X_s[None, :, :])).sum(axis=1)
+        term_st = (K_st[:, :, None] * (X_s[:, None, :] - X_t[None, :, :])).sum(axis=1)
+        grad = - (2 / (n * sigma**2)) * term_ss + (2 / (m * sigma**2)) * term_st
+        return grad
+    except MemoryError:
+        print("MemoryError encountered with compute_grad_vectorized.")
+        return None
+
 
 
 def mmd_alignment_adam(source_ds, target_ds, kernel=rbf_kernel, sigma=2.0, learning_rate=0.1,
-                       min_epochs=50, max_epochs=100, improvement_threshold=1e-5,
+                       min_epochs=50, max_epochs=500, improvement_threshold=1e-6,
                        beta1=0.9, beta2=0.999, epsilon=1e-8, log_file="mmd_alignment_log.txt"):
     """
     Align the source dataset to the target dataset by minimizing the MMD using the Adam optimizer.
@@ -237,10 +334,21 @@ def mmd_alignment_adam(source_ds, target_ds, kernel=rbf_kernel, sigma=2.0, learn
     v = np.zeros_like(source_ds)
     t = 0  # timestep
 
+    vectorized_op = True
     for epoch in range(max_epochs):
         t += 1  # increment time step
+
+        grad = None
         # Compute gradient of MMD with respect to source data
-        grad = compute_grad(X_s_aligned, target_ds, kernel, sigma)
+        if vectorized_op:
+            grad = compute_grad_vectorized(X_s_aligned, target_ds, kernel, sigma)
+            if grad is None:
+                print("Reverting to loop-based gradient computation.")
+                vectorized_op = False
+                grad = compute_grad(X_s_aligned, target_ds, kernel, sigma)
+        else:
+            grad = compute_grad(X_s_aligned, target_ds, kernel, sigma)
+
 
         # Check for NaN or divergent values in the gradient
         if np.isnan(grad).any() or np.isinf(grad).any():
@@ -288,79 +396,6 @@ def mmd_alignment_adam(source_ds, target_ds, kernel=rbf_kernel, sigma=2.0, learn
 
     print(f"Final MMD: {final_mmd:.6f}, Total epochs run: {total_epochs_run}")
     return X_s_aligned
-
-
-def handle_missing_values(dataset):
-    """
-    Handles missing values in a mixed-type dataset (both numeric and non-numeric).
-    """
-    # Check if dataset is a numpy array; if so, assume numeric
-    if isinstance(dataset, np.ndarray):
-        nan_count = np.isnan(dataset).sum()
-        print(f"Handling {nan_count} NaN values in the numeric dataset...")
-        col_means = np.nanmean(dataset, axis=0)
-        inds = np.where(np.isnan(dataset))
-        dataset[inds] = np.take(col_means, inds[1])
-        return dataset
-
-    # If dataset is a pandas DataFrame
-    elif isinstance(dataset, pd.DataFrame):
-        print("Handling NaN values in DataFrame...")
-
-        # Handle numeric columns
-        numeric_columns = dataset.select_dtypes(include=['number']).columns
-        dataset[numeric_columns] = dataset[numeric_columns].fillna(dataset[numeric_columns].mean())
-
-        # Handle non-numeric columns
-        non_numeric_columns = dataset.select_dtypes(exclude=['number']).columns
-        for col in non_numeric_columns:
-            dataset[col] = dataset[col].fillna(dataset[col].mode()[0])  # Replace with mode (most common value)
-
-        return dataset
-
-    else:
-        raise TypeError("Dataset must be a numpy array or pandas DataFrame.")
-
-
-def standardize_data(source_df, target_df):
-    """
-    Standardizes the numeric columns of source and target DataFrames using a StandardScaler
-    fitted on the combined data of only the common numeric columns.
-
-    Parameters:
-    - source_df: pandas DataFrame for the source dataset.
-    - target_df: pandas DataFrame for the target dataset.
-
-    Returns:
-    - source_df, target_df: DataFrames with the common numeric columns standardized.
-    """
-    # Get numeric columns from each DataFrame
-    source_numeric = source_df.select_dtypes(include=['number']).columns
-    target_numeric = target_df.select_dtypes(include=['number']).columns
-
-    # Find the common numeric columns between source and target
-    common_numeric = source_numeric.intersection(target_numeric)
-
-    if len(common_numeric) == 0:
-        print("No common numeric columns found for standardization.")
-        return source_df, target_df
-
-    # Combine the numeric columns from both datasets
-    combined = pd.concat([source_df[common_numeric], target_df[common_numeric]])
-
-    scaler = StandardScaler()
-    scaler.fit(combined)
-
-    # Transform only the common numeric columns
-    source_df[common_numeric] = scaler.transform(source_df[common_numeric])
-    target_df[common_numeric] = scaler.transform(target_df[common_numeric])
-
-    return source_df, target_df
-
-
-def clean_columns(df):
-    df.columns = df.columns.str.strip().str.lower()
-    return df
 
 
 def process_datasets(datasets, da_type):
